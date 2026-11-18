@@ -234,4 +234,13 @@ if selected_symbol:
         fig.add_hline(y=70, line_dash="dash", line_color="red", row=3, col=1)
         fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
         
-        fig.update_layout(
+               fig.update_layout(
+            xaxis_rangeslider_visible=False,
+            height=750,
+            template="plotly_white",
+            showlegend=True
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning(f"暫時無法取得 {selected_symbol} 的歷史 K 線數據。")
+
