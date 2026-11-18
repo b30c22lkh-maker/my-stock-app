@@ -33,7 +33,6 @@ DEFAULT_TICKERS = [
     'GE', 'RTX', 'LMT', 'BA', 'MMM', 'ETN', 'NEE', 'DUK', 'SO', 'PLD'
 ]
 
-# 單一股票抓取函式（加入重試與多重備援機制，防止雲端 IP 被擋）
 def fetch_single_stock(symbol):
     for attempt in range(2):
         try:
@@ -83,7 +82,6 @@ def fetch_single_stock(symbol):
             time.sleep(0.5)
     return None
 
-# 降低併發數為 4 執行緒（避免觸發 Yahoo Finance 雲端限流），並快取 1 小時
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_all_stocks(ticker_list):
     with st.spinner("⚡ 正在從市場安全載入 120 檔龍頭財報數據（首次載入約需 15～20 秒）..."):
@@ -92,7 +90,6 @@ def load_all_stocks(ticker_list):
     valid_results = [r for r in results if r is not None]
     return pd.DataFrame(valid_results)
 
-# 2. 側邊欄控制面板
 with st.sidebar:
     st.header("🎛️ 選股控制台")
     
@@ -119,19 +116,16 @@ with st.sidebar:
     only_pos_fcf = st.checkbox("僅顯示「正自由現金流」企業", value=False)
     only_above_sma200 = st.checkbox("僅顯示「站上 200 日年線」企業", value=False)
 
-# 載入數據並加上防呆檢查
 df = load_all_stocks(all_tickers)
 
 if df.empty or '產業' not in df.columns:
     st.error("⚠️ Yahoo Finance 暫時限制了雲端伺服器的數據請求，請點擊左側「🔄 強制刷新最新報價」或稍等 1 分鐘後重新整理網頁。")
     st.stop()
 
-# 產業多選器
 with st.sidebar:
     all_sectors = sorted(df['產業'].dropna().unique().tolist())
     selected_sectors = st.multiselect("篩選產業類別", all_sectors, default=all_sectors)
 
-# 3. 執行多維度篩選
 filtered_df = df[
     (df['本益比 (P/E)'].notna()) &
     (df['本益比 (P/E)'] > 0) &
@@ -154,7 +148,6 @@ if only_above_sma200:
 
 filtered_df = filtered_df.sort_values(by='潛在上漲空間 (%)', ascending=False)
 
-# 4. 主畫面數據儀表板
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("掃描企業總數", f"{len(df)} 檔")
 c2.metric("符合條件精選股", f"{len(filtered_df)} 檔")
@@ -166,7 +159,6 @@ c4.metric("平均目標價空間", f"+{avg_upside} %")
 st.subheader("📋 精選價值候選股名單（預設依華爾街目標價上漲空間排序）")
 st.dataframe(filtered_df, use_container_width=True, hide_index=True)
 
-# 一鍵下載 Excel
 output = BytesIO()
 with pd.ExcelWriter(output, engine='openpyxl') as writer:
     filtered_df.to_excel(writer, sheet_name='精選價值股', index=False)
@@ -180,7 +172,6 @@ st.download_button(
     type="primary"
 )
 
-# 5. 三層專業技術圖表（K線+布林通道 + 成交量 + RSI曲線）
 st.divider()
 st.subheader("📊 專業技術面買點確認（布林通道、雙均線、成交量與 RSI 曲線）")
 
@@ -234,7 +225,7 @@ if selected_symbol:
         fig.add_hline(y=70, line_dash="dash", line_color="red", row=3, col=1)
         fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
         
-               fig.update_layout(
+        fig.update_layout(
             xaxis_rangeslider_visible=False,
             height=750,
             template="plotly_white",
@@ -242,5 +233,3 @@ if selected_symbol:
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.warning(f"暫時無法取得 {selected_symbol} 的歷史 K 線數據。")
-
