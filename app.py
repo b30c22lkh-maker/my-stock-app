@@ -232,4 +232,11 @@ if selected_symbol:
             showlegend=True
         )
         st.plotly_chart(fig, use_container_width=True)
-    else:
+         fig.update_layout(
+            xaxis_rangeslider_visible=False,
+            height=750,
+            template="plotly_white",
+            showlegend=True
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
