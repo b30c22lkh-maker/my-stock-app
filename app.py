@@ -222,21 +222,8 @@ if selected_symbol:
         
         fig.add_trace(go.Scatter(x=hist.index, y=hist['RSI'], mode='lines', name='RSI (14)',
                                  line=dict(color='purple', width=1.5)), row=3, col=1)
-        fig.add_hline(y=70, line_dash="dash", line_color="red", row=3, col=1)
-        fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
-        
-        fig.update_layout(
-            xaxis_rangeslider_visible=False,
-            height=750,
-            template="plotly_white",
-            showlegend=True
-        )
-        st.plotly_chart(fig, use_container_width=True)
-         fig.update_layout(
-            xaxis_rangeslider_visible=False,
-            height=750,
-            template="plotly_white",
-            showlegend=True
-        )
+               fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
+        fig.update_layout(xaxis_rangeslider_visible=False, height=750, template="plotly_white", showlegend=True)
         st.plotly_chart(fig, use_container_width=True)
 
+# 程式結束
