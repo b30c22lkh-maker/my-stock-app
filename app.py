@@ -1,3 +1,4 @@
+python
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -7,28 +8,21 @@ from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 import time
 
-# 1. 網頁基本設定
 st.set_page_config(page_title="美股價值選股與量化看盤系統 Ultimate", page_icon="🚀", layout="wide")
 
 st.title("🚀 美股龍頭深度價值選股與量化看盤系統 (Ultimate 版)")
 st.markdown("採用**抗封鎖穩定引擎**，結合**華爾街目標價空間**、**自由現金流防雷**與**三層技術指標圖表**。")
 
 DEFAULT_TICKERS = [
-    # 科技與通訊
     'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'META', 'AMZN', 'TSLA', 'AVGO', 'ORCL', 'CRM',
     'ADBE', 'AMD', 'QCOM', 'TXN', 'INTC', 'IBM', 'CSCO', 'NOW', 'INTU', 'AMAT',
     'MU', 'LRCX', 'KLAC', 'ADI', 'PANW', 'SNPS', 'CDNS', 'NFLX', 'DIS', 'CMCSA',
-    'VZ', 'T', 'TMUS',
-    # 金融與支付
-    'BRK-B', 'JPM', 'V', 'MA', 'BAC', 'WFC', 'GS', 'MS', 'BLK', 'C',
-    'AXP', 'SPGI', 'CB', 'MMC', 'PGR', 'SCHW', 'PYPL', 'COF', 'USB', 'PNC',
-    # 醫療與製藥
+    'VZ', 'T', 'TMUS', 'BRK-B', 'JPM', 'V', 'MA', 'BAC', 'WFC', 'GS', 'MS', 'BLK',
+    'C', 'AXP', 'SPGI', 'CB', 'MMC', 'PGR', 'SCHW', 'PYPL', 'COF', 'USB', 'PNC',
     'LLY', 'UNH', 'JNJ', 'ABBV', 'MRK', 'TMO', 'ABT', 'DHR', 'PFE', 'AMGN',
     'ISRG', 'SYK', 'BSX', 'VRTX', 'REGN', 'GILD', 'BMY', 'CVS', 'CI', 'ELV',
-    # 必需與非必需消費
     'WMT', 'PG', 'COST', 'KO', 'PEP', 'MCD', 'NKE', 'SBUX', 'HD', 'LOW',
     'TGT', 'PM', 'MO', 'CL', 'MDLZ', 'KMB', 'GIS', 'EL', 'LULU', 'BKNG',
-    # 工業、能源與公用事業
     'XOM', 'CVX', 'COP', 'SLB', 'EOG', 'CAT', 'DE', 'UNP', 'UPS', 'HON',
     'GE', 'RTX', 'LMT', 'BA', 'MMM', 'ETN', 'NEE', 'DUK', 'SO', 'PLD'
 ]
@@ -38,12 +32,10 @@ def fetch_single_stock(symbol):
         try:
             stock = yf.Ticker(symbol)
             info = stock.info
-            
             price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose')
             if not price:
                 time.sleep(0.5)
                 continue
-                
             pe = info.get('trailingPE')
             f_pe = info.get('forwardPE')
             peg = info.get('pegRatio')
@@ -84,7 +76,7 @@ def fetch_single_stock(symbol):
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_all_stocks(ticker_list):
-    with st.spinner("⚡ 正在從市場安全載入 120 檔龍頭財報數據（首次載入約需 15～20 秒）..."):
+    with st.spinner("⚡ 正在從市場安全載入 113 檔龍頭財報數據（首次載入約需 15～20 秒）..."):
         with ThreadPoolExecutor(max_workers=4) as executor:
             results = list(executor.map(fetch_single_stock, ticker_list))
     valid_results = [r for r in results if r is not None]
@@ -92,7 +84,6 @@ def load_all_stocks(ticker_list):
 
 with st.sidebar:
     st.header("🎛️ 選股控制台")
-    
     custom_input = st.text_input("🔍 額外加入觀察代號（用逗號分隔）", placeholder="例如: TSM, PLTR, KO")
     custom_tickers = [t.strip().upper() for t in custom_input.split(",") if t.strip()]
     all_tickers = list(dict.fromkeys(DEFAULT_TICKERS + custom_tickers))
@@ -180,7 +171,6 @@ selected_symbol = st.selectbox("請選擇要深度分析走勢的股票代號：
 
 if selected_symbol:
     hist = yf.Ticker(selected_symbol).history(period="1y")
-    
     if not hist.empty:
         hist['SMA20'] = hist['Close'].rolling(window=20).mean()
         hist['STD20'] = hist['Close'].rolling(window=20).std()
@@ -195,35 +185,17 @@ if selected_symbol:
         rs = gain / loss
         hist['RSI'] = 100 - (100 / (1 + rs))
         
-        fig = make_subplots(
-            rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.04,
-            row_heights=[0.65, 0.17, 0.18],
-            subplot_titles=(f"{selected_symbol} 股價、均線與布林通道", "每日成交量", "RSI (14日) 相對強弱指標")
-        )
-        
-        fig.add_trace(go.Candlestick(
-            x=hist.index, open=hist['Open'], high=hist['High'],
-            low=hist['Low'], close=hist['Close'], name='日K線'
-        ), row=1, col=1)
-        
-        fig.add_trace(go.Scatter(x=hist.index, y=hist['BB_Upper'], mode='lines', name='布林上軌',
-                                 line=dict(color='rgba(150, 150, 150, 0.5)', dash='dot')), row=1, col=1)
-        fig.add_trace(go.Scatter(x=hist.index, y=hist['BB_Lower'], mode='lines', name='布林下軌',
-                                 line=dict(color='rgba(150, 150, 150, 0.5)', dash='dot'),
-                                 fill='tonexty', fillcolor='rgba(150, 150, 150, 0.08)'), row=1, col=1)
-        
-        fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA50'], mode='lines', name='50日季線',
-                                 line=dict(color='orange', width=1.5)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA200'], mode='lines', name='200日年線',
-                                 line=dict(color='blue', width=2)), row=1, col=1)
-        
-        fig.add_trace(go.Bar(x=hist.index, y=hist['Volume'], name='成交量',
-                             marker_color='rgba(100, 149, 237, 0.6)'), row=2, col=1)
-        
-        fig.add_trace(go.Scatter(x=hist.index, y=hist['RSI'], mode='lines', name='RSI (14)',
-                                 line=dict(color='purple', width=1.5)), row=3, col=1)
-               fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
+        fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=[0.65, 0.17, 0.18], subplot_titles=(f"{selected_symbol} 股價、均線與布林通道", "每日成交量", "RSI (14日) 相對強弱指標"))
+        fig.add_trace(go.Candlestick(x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'], name='日K線'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=hist.index, y=hist['BB_Upper'], mode='lines', name='布林上軌', line=dict(color='rgba(150, 150, 150, 0.5)', dash='dot')), row=1, col=1)
+        fig.add_trace(go.Scatter(x=hist.index, y=hist['BB_Lower'], mode='lines', name='布林下軌', line=dict(color='rgba(150, 150, 150, 0.5)', dash='dot'), fill='tonexty', fillcolor='rgba(150, 150, 150, 0.08)'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA50'], mode='lines', name='50日季線', line=dict(color='orange', width=1.5)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA200'], mode='lines', name='200日年線', line=dict(color='blue', width=2)), row=1, col=1)
+        fig.add_trace(go.Bar(x=hist.index, y=hist['Volume'], name='成交量', marker_color='rgba(100, 149, 237, 0.6)'), row=2, col=1)
+        fig.add_trace(go.Scatter(x=hist.index, y=hist['RSI'], mode='lines', name='RSI (14)', line=dict(color='purple', width=1.5)), row=3, col=1)
+        fig.add_hline(y=70, line_dash="dash", line_color="red", row=3, col=1)
+        fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
         fig.update_layout(xaxis_rangeslider_visible=False, height=750, template="plotly_white", showlegend=True)
         st.plotly_chart(fig, use_container_width=True)
 
-# 程式結束
+# END OF APP
