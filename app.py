@@ -49,21 +49,61 @@ def fetch_raw_stock_bundle(symbol):
             ticker = yf.Ticker(symbol)
             hist = ticker.history(period="1y")
             if len(hist) < 150: return None
-            info = ticker.info
+            info = {}
+            try: info = ticker.info or {}
+            except Exception: info = {}
+            
             price = info.get('currentPrice') or info.get('regularMarketPrice') or float(hist['Close'].iloc[-1])
-            mcap = info.get('marketCap') or 10_000_000_000
+            mcap = info.get('marketCap') or 15_000_000_000
             if price < 15 or mcap < 1_000_000_000: return None
+
+            # 1. 取得或自動計算機構持股比例
             inst_pct = round(info.get('heldPercentInstitutions', 0) * 100, 1) if info.get('heldPercentInstitutions') else 0.0
-            return {'symbol': symbol, 'info': info, 'price': price, 'mcap': mcap, 'inst_pct': inst_pct, 'hist': hist}
+            if inst_pct == 0.0:
+                try:
+                    mh = ticker.major_holders
+                    if mh is not None and not mh.empty:
+                        nums = pd.to_numeric(mh.iloc[:, 0].astype(str).str.replace('%', ''), errors='coerce').dropna()
+                        for val in nums:
+                            if 0.1 < val <= 1.0: inst_pct = round(val * 100, 1); break
+                            elif 15.0 <= val <= 100.0: inst_pct = round(val, 1); break
+                except Exception:
+                    pass
+
+            # 2. 取得或從財報自動計算 ROE
+            roe_val = round(info.get('returnOnEquity') * 100, 2) if info.get('returnOnEquity') is not None else None
+            if roe_val is None or roe_val == 0:
+                try:
+                    inc = ticker.income_stmt
+                    bal = ticker.balance_sheet
+                    if inc is not None and not inc.empty and bal is not None and not bal.empty:
+                        ni_rows = [r for r in inc.index if 'Net Income' in str(r)]
+                        eq_rows = [r for r in bal.index if 'Stockholders Equity' in str(r) or 'Total Equity' in str(r)]
+                        if ni_rows and eq_rows:
+                            ni = float(inc.loc[ni_rows.pop(0)].dropna().iloc[-1])
+                            eq = float(bal.loc[eq_rows.pop(0)].dropna().iloc[-1])
+                            if eq > 0: roe_val = round((ni / eq) * 100, 2)
+                except Exception:
+                    roe_val = 0.0
+
+            return {
+                'symbol': symbol,
+                'info': info,
+                'price': price,
+                'mcap': mcap,
+                'inst_pct': inst_pct,
+                'roe_val': roe_val if roe_val is not None else 0.0,
+                'hist': hist
+            }
         except Exception:
-            time.sleep(0.5)
+            time.sleep(0.4)
     return None
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_raw_market_data(extra_tickers):
     regime = get_market_regime()
     all_symbols = list(dict.fromkeys(extra_tickers + CORE_CANDIDATES))
-    with st.spinner(f"⚡ 正在高速掃描 {len(all_symbols)} 檔市值 ≥ 1B 潛力股（約 8～12 秒）..."):
+    with st.spinner(f"⚡ 正在高速掃描 {len(all_symbols)} 檔市值 ≥ 1B 潛力股與財報籌碼（約 10～15 秒）..."):
         with ThreadPoolExecutor(max_workers=3) as executor:
             bundles = list(executor.map(fetch_raw_stock_bundle, all_symbols))
     return [b for b in bundles if b is not None], regime
@@ -95,9 +135,9 @@ def evaluate_vcp_dynamic(bundles, spy_ret, max_risk_usd, pivot_days, contraction
         risk_per_share = max(pivot_price - stop_loss, 0.1)
         stop_loss_pct = round((risk_per_share / pivot_price) * 100, 1)
         suggested_shares = int(max_risk_usd // risk_per_share)
-        pe, roe, de, target_price, fcf = info.get('trailingPE'), info.get('returnOnEquity'), info.get('debtToEquity'), info.get('targetMeanPrice'), info.get('freeCashflow')
+        pe, de, target_price, fcf = info.get('trailingPE'), info.get('debtToEquity'), info.get('targetMeanPrice'), info.get('freeCashflow')
         upside_pct = round(((target_price - price) / price) * 100, 2) if target_price else None
-        rows.append({'股票代號': symbol, 'VCP評級': vcp_status, 'VCP分數': vcp_score, '目前股價': round(price, 2), '樞紐買點': pivot_price, '距買點(%)': dist_to_pivot, '建議停損': stop_loss, '停損幅度(%)': stop_loss_pct, '建議股數': suggested_shares, '機構持股(%)': b['inst_pct'], '量能比(%)': int(vol_ratio), '跑贏大盤(%)': rs_vs_spy, 'ROE (%)': round(roe * 100, 2) if roe is not None else 0, '本益比': round(pe, 2) if pe else 0, '負債比': round(de, 2) if de is not None else 0, '目標空間(%)': upside_pct, '市值(億)': round(mcap / 1e9, 2), '公司名稱': info.get('shortName', symbol), '產業': info.get('sector', '其他'), '自由現金流': "正現金流" if (fcf and fcf > 0) else "負/無數據"})
+        rows.append({'股票代號': symbol, 'VCP評級': vcp_status, 'VCP分數': vcp_score, '目前股價': round(price, 2), '樞紐買點': pivot_price, '距買點(%)': dist_to_pivot, '建議停損': stop_loss, '停損幅度(%)': stop_loss_pct, '建議股數': suggested_shares, '機構持股(%)': b['inst_pct'], 'ROE (%)': b['roe_val'], '量能比(%)': int(vol_ratio), '跑贏大盤(%)': rs_vs_spy, '本益比': round(pe, 2) if pe else 0, '負債比': round(de, 2) if de is not None else 0, '目標空間(%)': upside_pct, '市值(億)': round(mcap / 1e9, 2), '公司名稱': info.get('shortName', symbol), '產業': info.get('sector', '其他'), '自由現金流': "正現金流" if (fcf and fcf > 0) else "負/無數據"})
     return pd.DataFrame(rows)
 
 st.sidebar.header("🎛️ VCP 交易決策控制台")
@@ -107,9 +147,9 @@ custom_list = [t.strip().upper() for t in custom_input.split(",") if t.strip()]
 
 if st.sidebar.button("🔄 強制刷新最新行情", use_container_width=True): st.cache_data.clear(); st.rerun()
 
-exp_ai = st.sidebar.expander("🤖 免費 AI 投資分析師設定 (雙美系免費引擎)", expanded=True)
+exp_ai = st.sidebar.expander("🤖 免費 AI 投資分析師設定 (貼上後按 Enter)", expanded=True)
 ai_provider = exp_ai.selectbox("選擇免費 AI 平台", ["OpenRouter (免費聚合模型通道)", "GitHub Models (微軟免費 GPT-4o)"])
-user_api_key = exp_ai.text_input("貼上對應的免費 API Key", type="password", placeholder="貼上 sk-or-v1-... 或 ghp_...")
+user_api_key = exp_ai.text_input("貼上 API Key 並按 Enter 確認", type="password", placeholder="貼上 sk-or-v1-... 或 ghp_...")
 
 exp_vcp = st.sidebar.expander("🎯 VCP 型態引擎參數（即時重算）", expanded=False)
 pivot_days = exp_vcp.slider("樞紐突破與停損觀察天數", 10, 30, 15, step=5)
@@ -130,19 +170,15 @@ only_pos_fcf = exp_fund.checkbox("僅顯示「正自由現金流」企業", valu
 only_beat_spy = exp_fund.checkbox("僅顯示「近3個月跑贏大盤」強勢股", value=False)
 
 bundles, regime = load_raw_market_data(custom_list)
-if not bundles: st.warning("⚠️ Yahoo 連線暫時繁忙，請點擊左側「🔄 強制刷新最新行情」重試。"); st.stop()
+if not bundles: st.warning("⚠️ 連線暫時繁忙，請點擊左側「🔄 強制刷新最新行情」重試。"); st.stop()
 
 spy_3m, vix_val, tnx_val, spy_above_50, spy_above_200 = regime
-
 if vix_val < 20 and spy_above_50: market_banner = f"🟢 大盤環境紅綠燈：多頭安全區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ SPY站穩50日線"; st.success(market_banner)
 elif vix_val > 26 and not spy_above_200: market_banner = f"🔴 大盤環境紅綠燈：高風險警戒區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ SPY跌破200日年線"; st.error(market_banner)
 else: market_banner = f"🟡 大盤環境紅綠燈：震盪觀察區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ 市場處於震盪期"; st.warning(market_banner)
-
 df = evaluate_vcp_dynamic(bundles, spy_3m, max_risk_usd, pivot_days, contraction_ratio, max_high_dist)
-
 all_sectors = sorted(df['產業'].dropna().unique().tolist())
 selected_sectors = exp_fund.multiselect("篩選產業類別", all_sectors, default=all_sectors)
-
 filtered_df = df[(df['目前股價'] >= 15) & (df['市值(億)'] >= 10) & (df['停損幅度(%)'] <= max_stop_pct) & (pd.to_numeric(df['機構持股(%)'], errors='coerce').fillna(0) >= min_inst) & (pd.to_numeric(df['ROE (%)'], errors='coerce').fillna(0) >= min_roe) & (pd.to_numeric(df['負債比'], errors='coerce').fillna(0) <= max_de)]
 if cap_choice == "中小型成長股 (10億 ~ 100億美元)": filtered_df = filtered_df[filtered_df['市值(億)'] <= 100]
 elif cap_choice == "大型龍頭企業 (100億美元以上)": filtered_df = filtered_df[filtered_df['市值(億)'] > 100]
@@ -151,9 +187,7 @@ if only_pos_fcf: filtered_df = filtered_df[filtered_df['自由現金流'] == "�
 if only_beat_spy: filtered_df = filtered_df[filtered_df['跑贏大盤(%)'] > 0]
 if "高度符合" in vcp_filter: filtered_df = filtered_df[filtered_df['VCP分數'] >= 4]
 if "觀察中" in vcp_filter: filtered_df = filtered_df[filtered_df['VCP分數'] >= 3]
-
 filtered_df = filtered_df.sort_values(by=['VCP分數', '距買點(%)'], ascending=[False, True]).reset_index(drop=True)
-
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("掃描優質池 (≥1B / $15+)", f"{len(df)} 檔")
 c2.metric("符合風控強勢股", f"{len(filtered_df)} 檔")
@@ -226,20 +260,22 @@ quick_prompt = None
 if q_col1.button(f"🔍 深度健檢 {selected_symbol} 的 VCP 勝率與風險", use_container_width=True): quick_prompt = f"請根據目前數據，深度評估 {selected_symbol} ({active_row['公司名稱']}) 的 VCP 型態、財務體質、機構籌碼與大盤環境，分析它現在突破的勝率與最大風險點。"
 if q_col2.button(f"📋 幫我寫 {selected_symbol} 的分批進場與停利計畫", use_container_width=True): quick_prompt = f"假設我準備在 ${p_buy} 突破時買進 {s_shares} 股 {selected_symbol}，停損設在 ${p_stop}，請幫我設計一份具體的買進確認條件、分批停利目標與移動停損計畫。"
 if q_col3.button("🗑️ 清除對話紀錄", use_container_width=True): st.session_state.chat_history = []; st.rerun()
-user_typed = st.chat_input(f"輸入任何關於 {selected_symbol} 或美股投資的問題（需先在左側貼上 OpenRouter 或 GitHub API Key）...")
+user_typed = st.chat_input(f"輸入任何關於 {selected_symbol} 或美股投資的問題（需先在左側貼上 API Key 並按 Enter）...")
 active_prompt = quick_prompt if quick_prompt else user_typed
 for msg in st.session_state.chat_history: st.chat_message(msg["role"]).markdown(msg["content"])
-if active_prompt and not user_api_key: st.warning("⚠️ 請先在左側邊欄最上方貼上你的 OpenRouter 或 GitHub 免費 API Key，即可開始對話！")
 if not active_prompt: st.stop()
-if not user_api_key: st.warning("⚠️ 請先在左側邊欄最上方貼上你的 OpenRouter 或 GitHub 免費 API Key！"); st.stop()
-
+if not user_api_key: st.warning("⚠️ 請先在左側邊欄最上方的輸入框貼上你的 OpenRouter 或 GitHub 免費 API Key（貼上後記得按 Enter），即可開始對話！"); st.stop()
 st.session_state.chat_history.append({"role": "user", "content": active_prompt})
 st.chat_message("user").markdown(active_prompt)
 stock_context = f"你是專業華爾街VCP量化交易分析師，請用繁體中文條理分明回答。市場環境：{market_banner}。標的：{selected_symbol} ({active_row['公司名稱']})，產業：{active_row['產業']}。VCP評級：{active_row['VCP評級']}，量能比：{active_row['量能比(%)']}%，跑贏大盤3M：{active_row['跑贏大盤(%)']}%。現價${active_row['目前股價']}，樞紐買點${p_buy}（距買點{active_row['距買點(%)']}%），建議停損${p_stop}（風險{active_row['停損幅度(%)']}%），建議買進{s_shares}股。ROE {active_row['ROE (%)']}%，PE {active_row['本益比']}，負債比{active_row['負債比']}，現金流：{active_row['自由現金流']}，機構持股{active_row['機構持股(%)']}%。"
-base_url = "https://openrouter.ai" if "OpenRouter" in ai_provider else "https://azure.com"
+base_url = "openrouter.ai" if "OpenRouter" in ai_provider else "azure.com"
 model_name = "openrouter/free" if "OpenRouter" in ai_provider else "gpt-4o"
+try:
 client = OpenAI(api_key=user_api_key.strip(), base_url=base_url)
+with st.spinner("🤖 AI 分析師正在結合即時數據思考中..."):
 resp = client.chat.completions.create(model=model_name, messages=[{"role": "system", "content": stock_context}] + st.session_state.chat_history[-6:])
-reply_text = resp.choices.message.content
+reply_text = resp.choices.pop(0).message.content
 st.chat_message("assistant").markdown(reply_text)
 st.session_state.chat_history.append({"role": "assistant", "content": reply_text})
+except Exception as e:
+st.error(f"❌ AI 連線失敗，請檢查 API Key 是否正確或是否選對了對應平台（錯誤訊息：{e}）")
