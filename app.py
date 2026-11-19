@@ -172,7 +172,7 @@ def load_raw_market_data(is_hk, extra_tickers):
             except Exception:
                 pass
         with ThreadPoolExecutor(max_workers=3) as executor:
-            bundles = list(executor.map(lambda item: enrich_single_stock(item, item, is_hk), valid_hists.items()))
+             bundles = list(executor.map(lambda s: enrich_single_stock(s, valid_hists.get(s), is_hk), list(valid_hists.keys())))
     return [b for b in bundles if b is not None], regime
 def evaluate_vcp_dynamic(bundles, bench_ret, max_risk_amt, pivot_days, contraction_ratio, max_high_dist, is_hk):
     rows = []
