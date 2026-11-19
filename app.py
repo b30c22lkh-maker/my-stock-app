@@ -10,10 +10,9 @@ from datetime import datetime
 from io import BytesIO
 import time
 
-st.set_page_config(page_title="全美優質潛力股與 VCP 交易決策系統 Pro+", page_icon="🏆", layout="wide")
+st.set_page_config(page_title="全美優質潛力股與 VCP 交易終端機 Pro+", page_icon="🏆", layout="wide")
 
-st.title("🏆 全美優質潛力股與 VCP 實戰交易決策系統 (點選表格看圖版)")
-st.markdown("整合 **VIX 大盤紅綠燈**、**機構與高管籌碼動向**、**動態 VCP 收縮引擎**與**點擊表格即時看圖**。")
+st.title("🏆 全美優質潛力股與 VCP 實戰交易終端機")
 
 FALLBACK_CANDIDATES = [
     'NVDA', 'AAPL', 'MSFT', 'GOOGL', 'META', 'AMZN', 'TSLA', 'AVGO', 'ORCL', 'CRM',
@@ -111,7 +110,7 @@ def load_raw_market_data(cap_filter, extra_tickers):
     regime = get_market_regime()
     candidates = get_market_candidates(cap_filter)
     all_symbols = list(dict.fromkeys(extra_tickers + candidates))
-    with st.spinner(f"⚡ 正在掃描大盤紅綠燈與 {len(all_symbols)} 檔市值 ≥ 1B 企業籌碼數據（約 20 秒）..."):
+    with st.spinner(f"⚡ 正在掃描大盤紅綠燈與 {len(all_symbols)} 檔市值 ≥ 1B 企業數據（約 20 秒）..."):
         with ThreadPoolExecutor(max_workers=4) as executor:
             bundles = list(executor.map(fetch_raw_stock_bundle, all_symbols))
     return [b for b in bundles if b is not None], regime
@@ -136,7 +135,7 @@ def evaluate_vcp_dynamic(bundles, spy_ret, max_risk_usd, pivot_days, contraction
         if range_t2 > 0 and range_t3 < (range_t2 * contraction_ratio) and range_t2 <= (range_t1 * 1.1): vcp_score += 1
         vol_ratio = round((vol.iloc[-5:].mean() / vol.iloc[-50:].mean()) * 100, 0)
         if vol_ratio <= 90: vcp_score += 1
-        vcp_status = f"🔥 高度符合 ({vcp_score}/5)" if vcp_score >= 4 else (f"👀 觀察中 ({vcp_score}/5)" if vcp_score == 3 else f"一般 ({vcp_score}/5)")
+        vcp_status = f"🔥 高度 ({vcp_score}/5)" if vcp_score >= 4 else (f"👀 觀察 ({vcp_score}/5)" if vcp_score == 3 else f"一般 ({vcp_score}/5)")
         pivot_price = round(high.iloc[-pivot_days:].max(), 2)
         stop_loss = round(low.iloc[-pivot_days:].min() * 0.99, 2)
         dist_to_pivot = round(((pivot_price - price) / price) * 100, 2)
@@ -145,31 +144,32 @@ def evaluate_vcp_dynamic(bundles, spy_ret, max_risk_usd, pivot_days, contraction
         suggested_shares = int(max_risk_usd // risk_per_share)
         pe, roe, de, target_price, fcf = info.get('trailingPE'), info.get('returnOnEquity'), info.get('debtToEquity'), info.get('targetMeanPrice'), info.get('freeCashflow')
         upside_pct = round(((target_price - price) / price) * 100, 2) if target_price else None
-        rows.append({'股票代號': symbol, 'VCP型態評級': vcp_status, 'VCP分數': vcp_score, '目前股價': round(price, 2), '樞紐突破價': pivot_price, '距突破點(%)': dist_to_pivot, '建議停損價': stop_loss, '停損幅度(%)': stop_loss_pct, '建議買進股數': suggested_shares, '機構持股(%)': b['inst_pct'], '內部人動向': b['insider_note'], '近期量能比(%)': int(vol_ratio), '跑贏大盤3M(%)': rs_vs_spy, '財報防雷': b['earnings_note'], 'ROE (%)': round(roe * 100, 2) if roe is not None else 0, '本益比 (P/E)': round(pe, 2) if pe else 0, '負債比 (D/E)': round(de, 2) if de is not None else 0, '潛在上漲空間(%)': upside_pct, '市值 (億美元)': round(mcap / 1e9, 2), '公司名稱': info.get('shortName', symbol), '產業': info.get('sector', '其他'), '自由現金流': "正現金流" if (fcf and fcf > 0) else "負/無數據", '距52週高點(%)': round(dist_from_high, 2)})
+        rows.append({'股票代號': symbol, 'VCP評級': vcp_status, 'VCP分數': vcp_score, '目前股價': round(price, 2), '樞紐買點': pivot_price, '距買點(%)': dist_to_pivot, '建議停損': stop_loss, '停損幅度(%)': stop_loss_pct, '建議股數': suggested_shares, '機構持股(%)': b['inst_pct'], '內部人動向': b['insider_note'], '量能比(%)': int(vol_ratio), '跑贏大盤(%)': rs_vs_spy, '財報防雷': b['earnings_note'], 'ROE (%)': round(roe * 100, 2) if roe is not None else 0, '本益比': round(pe, 2) if pe else 0, '負債比': round(de, 2) if de is not None else 0, '目標空間(%)': upside_pct, '市值(億)': round(mcap / 1e9, 2), '公司名稱': info.get('shortName', symbol), '產業': info.get('sector', '其他'), '自由現金流': "正現金流" if (fcf and fcf > 0) else "負/無數據"})
     return pd.DataFrame(rows)
 
+# 4. 側邊欄折疊抽屜收納設計
 st.sidebar.header("🎛️ VCP 交易決策控制台")
-cap_choice = st.sidebar.selectbox("🏢 企業規模範圍（全部 ≥ 1B）", ["全市場不限規模 (1B / 10億美元以上)", "小型潛力股 (10億 ~ 20億美元)", "中型成長股 (20億 ~ 100億美元)", "大型企業 (100億美元以上)"])
-custom_input = st.sidebar.text_input("🔍 額外加入自選代號（逗號分隔）", placeholder="例如: PLTR, CELH, NVDA")
+cap_choice = st.sidebar.selectbox("🏢 企業規模範圍（≥ 1B）", ["全市場不限規模 (1B / 10億美元以上)", "小型潛力股 (10億 ~ 20億美元)", "中型成長股 (20億 ~ 100億美元)", "大型企業 (100億美元以上)"])
+custom_input = st.sidebar.text_input("🔍 額外自選代號（逗號分隔）", placeholder="例如: PLTR, CELH, NVDA")
 custom_list = [t.strip().upper() for t in custom_input.split(",") if t.strip()]
 
 if st.sidebar.button("🔄 強制刷新最新行情", use_container_width=True): st.cache_data.clear(); st.rerun()
 
-st.sidebar.divider()
-st.sidebar.subheader("🎯 VCP 型態引擎微調（即時重算）")
-pivot_days = st.sidebar.slider("樞紐突破與停損觀察天數", 10, 30, 15, step=5)
-contraction_ratio = st.sidebar.slider("波動收縮嚴格度 (越小越緊縮)", 0.50, 0.95, 0.75, step=0.05)
-max_high_dist = st.sidebar.slider("距 52 週高點最大距離 (%)", 15, 45, 25, step=5)
-vcp_filter = st.sidebar.radio("VCP 型態篩選", ["全部顯示 (依 VCP 分數排序)", "僅顯示 🔥 高度符合 VCP (4~5分)", "顯示 👀 觀察中以上 (3~5分)"])
-st.sidebar.divider()
-st.sidebar.subheader("🛡️ 倉位風控、籌碼與基本面門檻")
-max_risk_usd = st.sidebar.number_input("單筆最大可承受虧損 (美元)", min_value=50, max_value=50000, value=500, step=50)
-min_inst = st.sidebar.slider("最低機構持股比例 (%)", 0, 90, 0, step=10)
-min_roe = st.sidebar.slider("最低 ROE 要求 (%)", 0, 50, 0)
-max_de = st.sidebar.slider("負債比上限 (D/E %)", 0, 500, 250)
-max_pe = st.sidebar.slider("本益比上限 (0=不限)", 0, 150, 0)
-only_pos_fcf = st.sidebar.checkbox("僅顯示「正自由現金流」企業", value=False)
-only_beat_spy = st.sidebar.checkbox("僅顯示「近3個月跑贏大盤」強勢股", value=False)
+exp_vcp = st.sidebar.expander("🎯 VCP 型態引擎參數（即時重算）", expanded=True)
+pivot_days = exp_vcp.slider("樞紐突破與停損觀察天數", 10, 30, 15, step=5)
+contraction_ratio = exp_vcp.slider("波動收縮嚴格度 (越小越緊縮)", 0.50, 0.95, 0.75, step=0.05)
+max_high_dist = exp_vcp.slider("距 52 週高點最大距離 (%)", 15, 45, 25, step=5)
+vcp_filter = exp_vcp.radio("VCP 型態篩選", ["全部顯示 (依 VCP 分數排序)", "僅顯示 🔥 高度符合 VCP (4~5分)", "顯示 👀 觀察中以上 (3~5分)"])
+exp_risk = st.sidebar.expander("🛡️ 資金風控設定", expanded=True)
+max_risk_usd = exp_risk.number_input("單筆最大可承受虧損 (美元)", min_value=50, max_value=50000, value=500, step=50)
+max_stop_pct = exp_risk.slider("最大可接受停損幅度上限 (%)", 3, 25, 15, step=1)
+exp_fund = st.sidebar.expander("📊 籌碼與基本面門檻", expanded=False)
+min_inst = exp_fund.slider("最低機構持股比例 (%)", 0, 90, 0, step=10)
+min_roe = exp_fund.slider("最低 ROE 要求 (%)", 0, 50, 0)
+max_de = exp_fund.slider("負債比上限 (D/E %)", 0, 500, 250)
+max_pe = exp_fund.slider("本益比上限 (0=不限)", 0, 150, 0)
+only_pos_fcf = exp_fund.checkbox("僅顯示「正自由現金流」企業", value=False)
+only_beat_spy = exp_fund.checkbox("僅顯示「近3個月跑贏大盤」強勢股", value=False)
 bundles, regime = load_raw_market_data(cap_choice, custom_list)
 if not bundles: st.warning("⚠️ 暫時未取得數據，請點擊左側刷新重試。"); st.stop()
 spy_3m, vix_val, tnx_val, spy_above_50, spy_above_200 = regime
@@ -178,39 +178,85 @@ elif vix_val > 26 and not spy_above_200: st.error(f"🔴 大盤環境紅綠燈�
 else: st.warning(f"🟡 大盤環境紅綠燈：震盪觀察區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ 市場處於震盪或修正期（建議減半倉位操作）")
 df = evaluate_vcp_dynamic(bundles, spy_3m, max_risk_usd, pivot_days, contraction_ratio, max_high_dist)
 all_sectors = sorted(df['產業'].dropna().unique().tolist())
-selected_sectors = st.sidebar.multiselect("篩選產業類別", all_sectors, default=all_sectors)
-filtered_df = df[(df['目前股價'] >= 15) & (df['市值 (億美元)'] >= 10) & (pd.to_numeric(df['機構持股(%)'], errors='coerce').fillna(0) >= min_inst) & (pd.to_numeric(df['ROE (%)'], errors='coerce').fillna(0) >= min_roe) & (pd.to_numeric(df['負債比 (D/E)'], errors='coerce').fillna(0) <= max_de)]
-if max_pe > 0: filtered_df = filtered_df[filtered_df['本益比 (P/E)'] <= max_pe]
+selected_sectors = exp_fund.multiselect("篩選產業類別", all_sectors, default=all_sectors)
+filtered_df = df[(df['目前股價'] >= 15) & (df['市值(億)'] >= 10) & (df['停損幅度(%)'] <= max_stop_pct) & (pd.to_numeric(df['機構持股(%)'], errors='coerce').fillna(0) >= min_inst) & (pd.to_numeric(df['ROE (%)'], errors='coerce').fillna(0) >= min_roe) & (pd.to_numeric(df['負債比'], errors='coerce').fillna(0) <= max_de)]
+if max_pe > 0: filtered_df = filtered_df[filtered_df['本益比'] <= max_pe]
 if only_pos_fcf: filtered_df = filtered_df[filtered_df['自由現金流'] == "正現金流"]
-if only_beat_spy: filtered_df = filtered_df[filtered_df['跑贏大盤3M(%)'] > 0]
+if only_beat_spy: filtered_df = filtered_df[filtered_df['跑贏大盤(%)'] > 0]
 if "高度符合" in vcp_filter: filtered_df = filtered_df[filtered_df['VCP分數'] >= 4]
 if "觀察中" in vcp_filter: filtered_df = filtered_df[filtered_df['VCP分數'] >= 3]
-filtered_df = filtered_df.sort_values(by=['VCP分數', '距突破點(%)'], ascending=[False, True]).reset_index(drop=True)
+filtered_df = filtered_df.sort_values(by=['VCP分數', '距買點(%)'], ascending=[False, True]).reset_index(drop=True)
+
+頂部四大摘要指標
+
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("掃描優質池 (≥1B / $15+)", f"{len(df)} 檔")
-c2.metric("符合條件強勢股", f"{len(filtered_df)} 檔")
+c2.metric("符合風控強勢股", f"{len(filtered_df)} 檔")
 vcp_count = len(filtered_df[filtered_df['VCP分數'] >= 4])
 c3.metric("🔥 高度符合 VCP 標的", f"{vcp_count} 檔")
 c4.metric("標普500 (SPY) 近3月基準", f"{spy_3m} %")
-st.subheader("📋 VCP 交易決策名單（👆 直接點擊表格左側勾選框或任何一列，下方圖表自動切換）")
+st.divider()
+
+1. 左右並排看盤主佈局（左邊 52% 放表格，右邊 48% 放交易指令小卡 + K線圖）
+
+col_left, col_right = st.columns([1.08, 0.92])
 display_df = filtered_df.drop(columns=['VCP分數'])
 
+3. 表格視覺化高亮樣式函式
 
-table_event = st.dataframe(display_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
+def style_vcp_table(row):
+styles = [''] * len(row)
+cols = list(row.index)
+if '距買點(%)' in cols:
+idx = cols.index('距買點(%)')
+if row['距買點(%)'] <= 2.5: styles[idx] = 'background-color: #d4edda; color: #155724; font-weight: bold;'
+if '停損幅度(%)' in cols:
+idx = cols.index('停損幅度(%)')
+if row['停損幅度(%)'] > 10.0: styles[idx] = 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
+return styles
+col_left.subheader("📋 精選名單（👆 點擊任何一列，右側即時切換看圖）")
+
+搭配視覺進度條欄位設定與顏色高亮
+
+styled_df = display_df.style.apply(style_vcp_table, axis=1)
+col_cfg = {
+"機構持股(%)": st.column_config.ProgressColumn("機構持股(%)", format="%.1f%%", min_value=0, max_value=100),
+"ROE (%)": st.column_config.ProgressColumn("ROE (%)", format="%.1f%%", min_value=0, max_value=50),
+"目前股價": st.column_config.NumberColumn("目前股價", format="$%.2f"),
+"樞紐買點": st.column_config.NumberColumn("樞紐買點", format="$%.2f"),
+"建議停損": st.column_config.NumberColumn("建議停損", format="$%.2f")
+}
+table_event = col_left.dataframe(styled_df, use_container_width=True, hide_index=True, height=680, on_select="rerun", selection_mode="single-row", column_config=col_cfg)
 output = BytesIO()
 writer = pd.ExcelWriter(output, engine='openpyxl')
 display_df.to_excel(writer, sheet_name='VCP交易決策名單', index=False)
 df.drop(columns=['VCP分數']).to_excel(writer, sheet_name='全市場掃描總表', index=False)
 writer.close()
-st.download_button(label="📥 下載 Excel 交易風控報表", data=output.getvalue(), file_name=f"美股VCP交易決策_{pivot_days}日樞紐.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
-st.divider()
+col_left.download_button(label="📥 下載 Excel 交易風控報表", data=output.getvalue(), file_name=f"美股VCP交易決策_{pivot_days}日樞紐.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
 
+讀取點選的股票代號
 
 selected_rows = table_event.selection.rows if (table_event and hasattr(table_event, "selection")) else []
-if len(selected_rows) > 0 and len(display_df) > next(iter(selected_rows)): selected_symbol = display_df.iloc[next(iter(selected_rows))]['股票代號']
-elif len(display_df) > 0: selected_symbol = display_df.iloc[0]['股票代號']
-else: selected_symbol = df.iloc[0]['股票代號']
-st.subheader(f"📊 {selected_symbol} — VCP 突破買點與停損防守線圖表")
+if len(selected_rows) > 0 and len(display_df) > next(iter(selected_rows)): active_row = display_df.iloc[next(iter(selected_rows))]
+elif len(display_df) > 0: active_row = display_df.iloc
+else: active_row = df.iloc
+selected_symbol = active_row['股票代號']
+p_buy = float(active_row['樞紐買點'])
+p_stop = float(active_row['建議停損'])
+s_shares = int(active_row['建議股數'])
+total_capital = round(p_buy * s_shares, 2)
+
+2. 右側上方：專屬「交易執行指令小卡」
+
+col_right.subheader(f"🎯 {selected_symbol} ({active_row['公司名稱']}) 交易計畫")
+m1, m2, m3, m4 = col_right.columns(4)
+m1.metric("突破買進價", f"${p_buy}")
+m2.metric("防守停損價", f"${p_stop}", f"-{active_row['停損幅度(%)']}%", delta_color="inverse")
+m3.metric("建議買進股數", f"{s_shares} 股")
+m4.metric("預計投入本金", f"${total_capital:,.0f}")
+
+右側下方：三層互動式技術圖表
+
 hist = yf.Ticker(selected_symbol).history(period="1y")
 hist['SMA50'] = hist['Close'].rolling(window=50).mean()
 hist['SMA150'] = hist['Close'].rolling(window=150).mean()
@@ -220,20 +266,18 @@ delta = hist['Close'].diff()
 gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
 loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
 hist['RSI'] = 100 - (100 / (1 + (gain / loss)))
-pivot_high = round(hist['High'].iloc[-pivot_days:].max(), 2)
-stop_loss = round(hist['Low'].iloc[-pivot_days:].min() * 0.99, 2)
-fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=[0.65, 0.18, 0.17], subplot_titles=(f"{selected_symbol} 近{pivot_days}日樞紐突破買點 (${pivot_high}) 與防守停損線 (${stop_loss})", "成交量與 50 日均量（觀察量縮沉澱）", "RSI (14日) 動能指標"))
+fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=[0.65, 0.18, 0.17], subplot_titles=(f"{selected_symbol} 近{pivot_days}日樞紐突破 (${p_buy}) 與停損 (${p_stop})", "成交量與 50 日均量", "RSI (14日)"))
 fig.add_trace(go.Candlestick(x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'], name='日K線'), row=1, col=1)
-fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA50'], mode='lines', name='50日均線', line=dict(color='orange', width=1.5)), row=1, col=1)
-fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA150'], mode='lines', name='150日均線', line=dict(color='green', width=1.5)), row=1, col=1)
+fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA50'], mode='lines', name='50日線', line=dict(color='orange', width=1.5)), row=1, col=1)
+fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA150'], mode='lines', name='150日線', line=dict(color='green', width=1.5)), row=1, col=1)
 fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA200'], mode='lines', name='200日年線', line=dict(color='blue', width=2)), row=1, col=1)
 recent_dates = hist.index[-pivot_days:]
-fig.add_trace(go.Scatter(x=recent_dates, y=[pivot_high]*len(recent_dates), mode='lines', name=f'樞紐突破買點 (${pivot_high})', line=dict(color='red', width=2, dash='dash')), row=1, col=1)
-fig.add_trace(go.Scatter(x=recent_dates, y=[stop_loss]*len(recent_dates), mode='lines', name=f'防守停損線 (${stop_loss})', line=dict(color='teal', width=2, dash='dot')), row=1, col=1)
-fig.add_trace(go.Bar(x=hist.index, y=hist['Volume'], name='每日成交量', marker_color='rgba(100, 149, 237, 0.5)'), row=2, col=1)
-fig.add_trace(go.Scatter(x=hist.index, y=hist['Vol_MA50'], mode='lines', name='50日均量線', line=dict(color='darkblue', width=1.5)), row=2, col=1)
-fig.add_trace(go.Scatter(x=hist.index, y=hist['RSI'], mode='lines', name='RSI (14)', line=dict(color='purple', width=1.5)), row=3, col=1)
+fig.add_trace(go.Scatter(x=recent_dates, y=[p_buy]*len(recent_dates), mode='lines', name='突破買點', line=dict(color='red', width=2, dash='dash')), row=1, col=1)
+fig.add_trace(go.Scatter(x=recent_dates, y=[p_stop]*len(recent_dates), mode='lines', name='停損底線', line=dict(color='teal', width=2, dash='dot')), row=1, col=1)
+fig.add_trace(go.Bar(x=hist.index, y=hist['Volume'], name='成交量', marker_color='rgba(100, 149, 237, 0.5)'), row=2, col=1)
+fig.add_trace(go.Scatter(x=hist.index, y=hist['Vol_MA50'], mode='lines', name='50日均量', line=dict(color='darkblue', width=1.5)), row=2, col=1)
+fig.add_trace(go.Scatter(x=hist.index, y=hist['RSI'], mode='lines', name='RSI', line=dict(color='purple', width=1.5)), row=3, col=1)
 fig.add_hline(y=70, line_dash="dash", line_color="red", row=3, col=1)
 fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
-fig.update_layout(xaxis_rangeslider_visible=False, height=780, template="plotly_white", showlegend=True)
-st.plotly_chart(fig, use_container_width=True)
+fig.update_layout(xaxis_rangeslider_visible=False, height=620, template="plotly_white", showlegend=False, margin=dict(l=10, r=10, t=35, b=10))
+col_right.plotly_chart(fig, use_container_width=True)
