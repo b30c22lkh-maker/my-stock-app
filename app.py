@@ -321,13 +321,12 @@ gh_url = "github.ai" + "/inference"
 or_url = "https://openrouter.ai" + "/api/v1"
 reply_text = ""
 if "僅使用 OpenRouter" not in ai_mode and gh_clean:
-try:
-stream = OpenAI(api_key=gh_clean, base_url=gh_url, timeout=8.0).chat.completions.create(model="gpt-4o-mini", messages=msgs, stream=True)
-reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in stream for c in chunk.choices if c.delta.content)
-except Exception: reply_text = ""
+    try: reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in OpenAI(api_key=gh_clean, base_url=gh_url, timeout=8.0).chat.completions.create(model="gpt-4o-mini", messages=msgs, stream=True) for c in chunk.choices if c.delta.content)
+    except Exception: reply_text = ""
+
 if not reply_text and "僅使用 GitHub" not in ai_mode and or_clean:
-try:
-stream = OpenAI(api_key=or_clean, base_url=or_url, timeout=15.0).chat.completions.create(model="openrouter/free", messages=msgs, stream=True)
-reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in stream for c in chunk.choices if c.delta.content)
-except Exception as e: reply_text = f"❌ AI 引擎暫時繁忙，請稍後再試（{e}）"; st.chat_message("assistant").markdown(reply_text)
+    try: reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in OpenAI(api_key=or_clean, base_url=or_url, timeout=15.0).chat.completions.create(model="openrouter/free", messages=msgs, stream=True) for c in chunk.choices if c.delta.content)
+    except Exception as e: reply_text = f"❌ AI 引擎暫時繁忙，請稍後再試（{e}）"; st.chat_message("assistant").markdown(reply_text)
+
 st.session_state.chat_history.append({"role": "assistant", "content": reply_text})
+
