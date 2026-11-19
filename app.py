@@ -211,8 +211,8 @@ writer.close()
 col_left.download_button(label="📥 下載 Excel 交易風控報表", data=output.getvalue(), file_name=f"美股VCP交易決策_{pivot_days}日樞紐.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
 selected_rows = table_event.selection.rows if (table_event and hasattr(table_event, "selection")) else []
 if len(selected_rows) > 0 and len(display_df) > next(iter(selected_rows)): active_row = display_df.iloc[next(iter(selected_rows))]
-elif len(display_df) > 0: active_row = display_df.iloc
-else: active_row = df.iloc
+elif len(display_df) > 0: active_row = display_df.head(1).squeeze()
+else: active_row = df.head(1).squeeze()
 selected_symbol = active_row['股票代號']
 p_buy = float(active_row['樞紐買點'])
 p_stop = float(active_row['建議停損'])
