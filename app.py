@@ -34,14 +34,12 @@ def get_market_candidates(cap_filter):
         EquityQuery('gt', ['avgdailyvol3m', 300000]),
         EquityQuery('gt', ['peratio.lasttwelvemonths', 0])
     ]
-    
     if cap_filter == "小型潛力股 (10億 ~ 20億美元)":
         conditions.append(EquityQuery('btwn', ['intradaymarketcap', 1_000_000_000, 2_000_000_000]))
     elif cap_filter == "中型成長股 (20億 ~ 100億美元)":
         conditions.append(EquityQuery('btwn', ['intradaymarketcap', 2_000_000_000, 10_000_000_000]))
     elif cap_filter == "大型企業 (100億美元以上)":
         conditions.append(EquityQuery('gt', ['intradaymarketcap', 10_000_000_000]))
-
     try:
         q = EquityQuery('and', conditions)
         res = yf.screen(q, size=100, sortField='epsgrowth.lasttwelvemonths', sortAsc=False)
@@ -58,16 +56,13 @@ def analyze_stock_pro(args):
             info = ticker.info
             price = info.get('currentPrice') or info.get('regularMarketPrice')
             mcap = info.get('marketCap')
-            
             if not price or price < 15 or not mcap or mcap < 1_000_000_000:
                 return None
-
             pe = info.get('trailingPE')
             roe = info.get('returnOnEquity')
             de = info.get('debtToEquity')
             target_price = info.get('targetMeanPrice')
             fcf = info.get('freeCashflow')
-            
             earnings_note = "安全"
             try:
                 cal = ticker.calendar
@@ -80,25 +75,20 @@ def analyze_stock_pro(args):
                         earnings_note = f"{days_to_earn}天後"
             except Exception:
                 earnings_note = "未公布"
-
             hist = ticker.history(period="1y")
             if len(hist) < 150:
                 return None
-                
             close = hist['Close']
             high = hist['High']
             low = hist['Low']
             vol = hist['Volume']
-            
             stock_3m_ret = ((close.iloc[-1] - close.iloc[-63]) / close.iloc[-63]) * 100
             rs_vs_spy = round(stock_3m_ret - spy_ret, 2)
-            
             sma50 = close.rolling(50).mean().iloc[-1]
             sma150 = close.rolling(150).mean().iloc[-1]
             sma200 = close.rolling(200).mean().iloc[-1]
             sma200_prev = close.rolling(200).mean().iloc[-20]
             high_52w = high.max()
-            
             vcp_score = 0
             if price > sma50 and sma50 > sma150 and price > sma200:
                 vcp_score += 1
@@ -113,21 +103,18 @@ def analyze_stock_pro(args):
                 vcp_score += 1
             if vol.iloc[-10:].mean() < vol.iloc[-50:].mean():
                 vcp_score += 1
-
             if vcp_score >= 4:
                 vcp_status = f"🔥 高度符合 ({vcp_score}/5)"
             elif vcp_score == 3:
                 vcp_status = f"👀 觀察中 ({vcp_score}/5)"
             else:
                 vcp_status = f"一般 ({vcp_score}/5)"
-
             pivot_price = round(high.iloc[-15:].max(), 2)
             stop_loss = round(low.iloc[-15:].min() * 0.99, 2)
             risk_per_share = max(pivot_price - stop_loss, 0.1)
             stop_loss_pct = round((risk_per_share / pivot_price) * 100, 1)
             suggested_shares = int(max_risk_usd // risk_per_share)
             upside_pct = round(((target_price - price) / price) * 100, 2) if target_price else None
-            
             return {
                 '股票代號': symbol,
                 'VCP型態評級': vcp_status,
@@ -158,7 +145,6 @@ def load_full_analysis(cap_filter, extra_tickers, max_risk_usd):
     spy_ret = get_spy_3m_return()
     candidates = get_market_candidates(cap_filter)
     all_symbols = list(dict.fromkeys(extra_tickers + candidates))
-    
     tasks = [(sym, spy_ret, max_risk_usd) for sym in all_symbols]
     with st.spinner(f"⚡ 正在深度掃描全市場 {len(all_symbols)} 檔市值 ≥ 1B 潛力股並運算 VCP 與倉位風控（約 20 秒）..."):
         with ThreadPoolExecutor(max_workers=4) as executor:
@@ -171,21 +157,17 @@ with st.sidebar:
     custom_input = st.text_input("🔍 額外加入自選代號（逗號分隔）", placeholder="例如: PLTR, CELH, NVDA")
     custom_list = [t.strip().upper() for t in custom_input.split(",") if t.strip()]
     max_risk_usd = st.number_input("🛡️ 單筆交易最大可承受虧損 (美元)", min_value=50, max_value=50000, value=500, step=50)
-    
     if st.button("🔄 強制刷新最新行情", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
-        
     st.divider()
     st.subheader("1️⃣ 財務穩健度門檻")
     min_roe = st.slider("最低 ROE 要求 (%)", 0, 50, 12)
     max_de = st.slider("負債比上限 (D/E %)", 0, 300, 150)
     only_pos_fcf = st.checkbox("僅顯示「正自由現金流」企業", value=True)
-    
     st.subheader("2️⃣ 估值與相對強度")
     max_pe = st.slider("本益比上限 (P/E)", 5, 80, 35)
     only_beat_spy = st.checkbox("僅顯示「近3個月跑贏大盤 (RS > 0)」強勢股", value=True)
-    
     st.subheader("3️⃣ VCP 型態過濾")
     vcp_filter = st.radio("VCP 型態符合程度", ["全部顯示 (依 VCP 分數排序)", "僅顯示 🔥 高度符合 VCP (4~5分)", "顯示 👀 觀察中以上 (3~5分)"])
 
@@ -214,7 +196,6 @@ if only_pos_fcf:
     filtered_df = filtered_df[filtered_df['自由現金流'] == "正現金流"]
 if only_beat_spy:
     filtered_df = filtered_df[filtered_df['跑贏大盤3M(%)'] > 0]
-
 if "高度符合" in vcp_filter:
     filtered_df = filtered_df[filtered_df['VCP分數'] >= 4]
 elif "觀察中" in vcp_filter:
@@ -239,16 +220,13 @@ with pd.ExcelWriter(output, engine='openpyxl') as writer:
     df.drop(columns=['VCP分數']).to_excel(writer, sheet_name='全市場掃描總表', index=False)
 
 st.download_button(label="📥 下載 Excel 交易風控報表", data=output.getvalue(), file_name=f"美股VCP交易決策_風控{max_risk_usd}USD.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
+
 st.divider()
 st.subheader("📊 VCP 突破買點與停損防守線圖表")
+
 chart_options = display_df['股票代號'].tolist() if len(display_df) > 0 else df['股票代號'].tolist()
 selected_symbol = st.selectbox("請選擇要檢視買賣點位的股票代號：", chart_options)
-def plot_vcp_chart(symbol):
-if not symbol:
-return
-hist = yf.Ticker(symbol).history(period="1y")
-if hist.empty:
-return
+hist = yf.Ticker(selected_symbol).history(period="1y")
 hist['SMA50'] = hist['Close'].rolling(window=50).mean()
 hist['SMA150'] = hist['Close'].rolling(window=150).mean()
 hist['SMA200'] = hist['Close'].rolling(window=200).mean()
@@ -259,7 +237,7 @@ loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
 hist['RSI'] = 100 - (100 / (1 + (gain / loss)))
 pivot_high = round(hist['High'].iloc[-15:].max(), 2)
 stop_loss = round(hist['Low'].iloc[-15:].min() * 0.99, 2)
-fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=[0.65, 0.18, 0.17], subplot_titles=(f"{symbol} 樞紐突破買點 (${pivot_high}) 與防守停損線 (${stop_loss})", "成交量與 50 日均量（觀察量縮沉澱）", "RSI (14日) 動能指標"))
+fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=[0.65, 0.18, 0.17], subplot_titles=(f"{selected_symbol} 樞紐突破買點 (${pivot_high}) 與防守停損線 (${stop_loss})", "成交量與 50 日均量（觀察量縮沉澱）", "RSI (14日) 動能指標"))
 fig.add_trace(go.Candlestick(x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'], name='日K線'), row=1, col=1)
 fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA50'], mode='lines', name='50日均線', line=dict(color='orange', width=1.5)), row=1, col=1)
 fig.add_trace(go.Scatter(x=hist.index, y=hist['SMA150'], mode='lines', name='150日均線', line=dict(color='green', width=1.5)), row=1, col=1)
@@ -274,4 +252,3 @@ fig.add_hline(y=70, line_dash="dash", line_color="red", row=3, col=1)
 fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
 fig.update_layout(xaxis_rangeslider_visible=False, height=780, template="plotly_white", showlegend=True)
 st.plotly_chart(fig, use_container_width=True)
-plot_vcp_chart(selected_symbol)
