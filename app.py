@@ -254,7 +254,7 @@ st.subheader("📋 VCP 交易決策與倉位風控名單（核心欄位已置左
 display_df = filtered_df.drop(columns=['VCP分數'])
 st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-一鍵下載 Excel
+#一鍵下載 Excel
 
 output = BytesIO()
 with pd.ExcelWriter(output, engine='openpyxl') as writer:
