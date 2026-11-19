@@ -265,12 +265,9 @@ spy_3m, vix_val, tnx_val, spy_above_50, spy_above_200 = regime
 
 #【網頁頂部大盤紅綠燈橫幅】
 
-if vix_val < 20 and spy_above_50:
-st.success(f"🟢 大盤環境紅綠燈：多頭安全區 ｜ VIX 恐慌指數：{vix_val}（低波動） ｜ 10年期美債殖利率：{tnx_val}% ｜ 標普500站穩50日均線（適合按標準風控執行 VCP 突破）")
-elif vix_val > 26 and not spy_above_200:
-st.error(f"🔴 大盤環境紅綠燈：高風險警戒區 ｜ VIX 恐慌指數：{vix_val}（高度恐慌） ｜ 10年期美債殖利率：{tnx_val}% ｜ 標普500跌破200日年線（假突破風險極高，建議保留現金觀望）")
-else:
-st.warning(f"🟡 大盤環境紅綠燈：震盪觀察區 ｜ VIX 恐慌指數：{vix_val} ｜ 10年期美債殖利率：{tnx_val}% ｜ 市場處於震盪或修正期（建議挑選高度符合 VCP 標的，並將單筆風險金額減半）")
+if vix_val < 20 and spy_above_50: st.success(f"🟢 大盤環境紅綠燈：多頭安全區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ SPY站穩50日線（適合按標準風控執行 VCP 突破）")
+elif vix_val > 26 and not spy_above_200: st.error(f"🔴 大盤環境紅綠燈：高風險警戒區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ SPY跌破200日年線（假突破風險高，建議觀望）")
+else: st.warning(f"🟡 大盤環境紅綠燈：震盪觀察區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ 市場處於震盪或修正期（建議減半倉位操作）")
 df = evaluate_vcp_dynamic(bundles, spy_3m, max_risk_usd, pivot_days, contraction_ratio, max_high_dist)
 all_sectors = sorted(df['產業'].dropna().unique().tolist())
 selected_sectors = st.sidebar.multiselect("篩選產業類別", all_sectors, default=all_sectors)
