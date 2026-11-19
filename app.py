@@ -185,33 +185,12 @@ stop_loss = round(low.iloc[-pivot_days:].min() * 0.99, 2)
 dist_to_pivot = round(((pivot_price - price) / price) * 100, 2)
 risk_per_share = max(pivot_price - stop_loss, 0.05)
 stop_loss_pct = round((risk_per_share / pivot_price) * 100, 1)
-if is_hk:
-lot = b['lot_size']
-raw_shares = int(max_risk_amt // risk_per_share)
-suggested_shares = max((raw_shares // lot) * lot, lot) if (pivot_price * lot <= max_risk_amt * 15) else 0
-else:
-suggested_shares = int(max_risk_amt // risk_per_share)
-row_dict = {
-'股票代號': symbol,
-'VCP評級': vcp_status,
-'VCP分數': vcp_score,
-'目前股價': round(price, 2),
-'樞紐買點': pivot_price,
-'距買點(%)': dist_to_pivot,
-'建議停損': stop_loss,
-'停損幅度(%)': stop_loss_pct,
-'建議股數': suggested_shares
-}
-if is_hk:
-row_dict['每手股數'] = b['lot_size']
-row_dict['每手入場費(HK$)'] = round(pivot_price * b['lot_size'], 0)
-row_dict['ROE (%)'] = b['roe_val']
-row_dict['本益比'] = b['pe_val']
-row_dict['負債比(%)'] = b['de_val']
-row_dict['量能比(%)'] = int(vol_ratio)
-row_dict['跑贏大盤(%)'] = rs_vs_idx
-row_dict['公司名稱'] = info.get('shortName', symbol)
-rows.append(row_dict)
+        suggested_shares = max((int(max_risk_amt // risk_per_share) // b['lot_size']) * b['lot_size'], b['lot_size']) if (is_hk and pivot_price * b['lot_size'] <= max_risk_amt * 15) else (0 if is_hk else int(max_risk_amt // risk_per_share))
+        row_dict = {'股票代號': symbol, 'VCP評級': vcp_status, 'VCP分數': vcp_score, '目前股價': round(price, 2), '樞紐買點': pivot_price, '距買點(%)': dist_to_pivot, '建議停損': stop_loss, '停損幅度(%)': stop_loss_pct, '建議股數': suggested_shares}
+        if is_hk: row_dict['每手股數'], row_dict['每手入場費(HK$)'] = b['lot_size'], round(pivot_price * b['lot_size'], 0)
+        row_dict.update({'ROE (%)': b['roe_val'], '本益比': b['pe_val'], '負債比(%)': b['de_val'], '量能比(%)': int(vol_ratio), '跑贏大盤(%)': rs_vs_idx, '公司名稱': info.get('shortName', symbol)})
+        rows.append(row_dict)
+
 return pd.DataFrame(rows)
 st.sidebar.header("🌎 選擇交易市場")
 market_choice = st.sidebar.radio("切換掃描市場", ["🇺🇸 美股市場 (USD)", "🇭🇰 港股市場 (HKD)"], horizontal=True)
