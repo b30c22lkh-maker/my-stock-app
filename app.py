@@ -198,14 +198,9 @@ is_hk = "港股" in market_choice
 curr_sym = "HK$" if is_hk else "$"
 st.sidebar.divider()
 st.sidebar.header("🎛️ VCP 交易決策控制台")
-if is_hk:
-custom_input = st.sidebar.text_input("🔍 額外港股代號（直接輸入數字如 700, 9988）", placeholder="例如: 700, 9988, 1211")
-custom_list = [f"{t.strip().replace('.HK','').replace('.hk','').zfill(4)}.HK" for t in custom_input.split(",") if t.strip()]
-max_lot_fee = st.sidebar.number_input("💰 港股每手入場費上限 (HK$)", min_value=1000, max_value=200000, value=30000, step=1000)
-else:
-custom_input = st.sidebar.text_input("🔍 額外美股代號（逗號分隔）", placeholder="例如: SOXL, TSM, AMD")
-custom_list = [t.strip().upper() for t in custom_input.split(",") if t.strip()]
-max_lot_fee = 999999999
+custom_input = st.sidebar.text_input("🔍 額外港股代號（直接輸入數字如 700, 9988）" if is_hk else "🔍 額外美股代號（逗號分隔）", placeholder="例如: 700, 9988, 1211" if is_hk else "例如: SOXL, TSM, AMD")
+custom_list = [f"{t.strip().replace('.HK','').replace('.hk','').zfill(4)}.HK" for t in custom_input.split(",") if t.strip()] if is_hk else [t.strip().upper() for t in custom_input.split(",") if t.strip()]
+max_lot_fee = st.sidebar.number_input("💰 港股每手入場費上限 (HK$)", min_value=1000, max_value=200000, value=30000, step=1000) if is_hk else 999999999
 if st.sidebar.button("🔄 強制刷新最新行情", use_container_width=True): st.cache_data.clear(); st.rerun()
 or_key = st.secrets.get("OPENROUTER_API_KEY", "")
 gh_key = st.secrets.get("GITHUB_API_KEY", "")
