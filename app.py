@@ -275,7 +275,7 @@ or_clean = "".join(c for c in str(or_key) if ord(c) < 128).strip()
 gh_clean = "".join(c for c in str(gh_key) if ord(c) < 128).strip()
 reply_text = ""
 
-if "僅使用 GitHub" not in ai_mode and or_clean: reply_text = OpenAI(api_key=or_clean, base_url="https://openrouter.ai").chat.completions.create(model="openrouter/free", messages=msgs).choices.pop(0).message.content
+if "僅使用 GitHub" not in ai_mode and or_clean: reply_text = OpenAI(api_key=or_clean, base_url="https://openrouter.ai" + "/api/v1").chat.completions.create(model="openrouter/free", messages=msgs).choices.pop(0).message.content
 if not reply_text and "僅使用 OpenRouter" not in ai_mode and gh_clean: reply_text = OpenAI(api_key=gh_clean, base_url="https://azure.com").chat.completions.create(model="gpt-4o", messages=msgs).choices.pop(0).message.content
 
 st.chat_message("assistant").markdown(reply_text)
