@@ -15,7 +15,6 @@ st.set_page_config(page_title="全美優質潛力股與 VCP 交易決策系統 P
 st.title("🏆 全美優質潛力股與 VCP 實戰交易決策系統 (VCP 引擎進化版)")
 st.markdown("全市場掃描（**市值 ≥ 1B**、**股價 ≥ $15**），支援**動態調整 VCP 收縮參數**、**距突破點百分比預警**與**自動倉位風控**。")
 
-# 備援優質潛力池（涵蓋大型龍頭 + 中小型高成長黑馬股，市值皆 > 1B）
 FALLBACK_CANDIDATES = [
     'NVDA', 'AAPL', 'MSFT', 'GOOGL', 'META', 'AMZN', 'TSLA', 'AVGO', 'ORCL', 'CRM',
     'PLTR', 'APP', 'CELH', 'DUOL', 'CAVA', 'ANET', 'PANW', 'CRWD', 'SNOW', 'DDOG',
@@ -65,7 +64,6 @@ def get_market_candidates(cap_filter):
             return symbols
     except Exception:
         pass
-    # 若雲端篩選受限，自動啟用內建 130 檔跨市值優質潛力池
     return FALLBACK_CANDIDATES
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -198,54 +196,40 @@ def evaluate_vcp_dynamic(bundles, spy_ret, max_risk_usd, pivot_days, contraction
         })
     return pd.DataFrame(rows)
 
-with st.sidebar:
-    st.header("🎛️ VCP 交易決策控制台")
-    cap_choice = st.selectbox("🏢 企業規模範圍（全部 ≥ 1B）", ["全市場不限規模 (1B / 10億美元以上)", "小型潛力股 (10億 ~ 20億美元)", "中型成長股 (20億 ~ 100億美元)", "大型企業 (100億美元以上)"])
-    custom_input = st.text_input("🔍 額外加入自選代號（逗號分隔）", placeholder="例如: PLTR, CELH, NVDA")
-    custom_list = [t.strip().upper() for t in custom_input.split(",") if t.strip()]
-    
-    if st.button("🔄 強制刷新最新行情", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
-        
-    st.divider()
-    st.subheader("🎯 VCP 型態引擎微調（即時重算）")
-    pivot_days = st.slider("樞紐突破與停損觀察天數", 10, 30, 15, step=5)
-    contraction_ratio = st.slider("波動收縮嚴格度 (越小越緊縮)", 0.50, 0.95, 0.75, step=0.05)
-    max_high_dist = st.slider("距 52 週高點最大距離 (%)", 15, 45, 25, step=5)
-    vcp_filter = st.radio("VCP 型態篩選", ["全部顯示 (依 VCP 分數排序)", "僅顯示 🔥 高度符合 VCP (4~5分)", "顯示 👀 觀察中以上 (3~5分)"])
+st.sidebar.header("🎛️ VCP 交易決策控制台")
+cap_choice = st.sidebar.selectbox("🏢 企業規模範圍（全部 ≥ 1B）", ["全市場不限規模 (1B / 10億美元以上)", "小型潛力股 (10億 ~ 20億美元)", "中型成長股 (20億 ~ 100億美元)", "大型企業 (100億美元以上)"])
+custom_input = st.sidebar.text_input("🔍 額外加入自選代號（逗號分隔）", placeholder="例如: PLTR, CELH, NVDA")
+custom_list = [t.strip().upper() for t in custom_input.split(",") if t.strip()]
 
-    st.divider()
-    st.subheader("🛡️ 倉位風控與基本面門檻")
-    max_risk_usd = st.number_input("單筆最大可承受虧損 (美元)", min_value=50, max_value=50000, value=500, step=50)
-    min_roe = st.slider("最低 ROE 要求 (%)", 0, 50, 0)
-    max_de = st.slider("負債比上限 (D/E %)", 0, 500, 250)
-    max_pe = st.slider("本益比上限 (0=不限)", 0, 150, 0)
-    only_pos_fcf = st.checkbox("僅顯示「正自由現金流」企業", value=False)
-    only_beat_spy = st.checkbox("僅顯示「近3個月跑贏大盤」強勢股", value=False)
+if st.sidebar.button("🔄 強制刷新最新行情", use_container_width=True): st.cache_data.clear(); st.rerun()
+
+st.sidebar.divider()
+st.sidebar.subheader("🎯 VCP 型態引擎微調（即時重算）")
+pivot_days = st.sidebar.slider("樞紐突破與停損觀察天數", 10, 30, 15, step=5)
+contraction_ratio = st.sidebar.slider("波動收縮嚴格度 (越小越緊縮)", 0.50, 0.95, 0.75, step=0.05)
+max_high_dist = st.sidebar.slider("距 52 週高點最大距離 (%)", 15, 45, 25, step=5)
+vcp_filter = st.sidebar.radio("VCP 型態篩選", ["全部顯示 (依 VCP 分數排序)", "僅顯示 🔥 高度符合 VCP (4~5分)", "顯示 👀 觀察中以上 (3~5分)"])
+
+st.sidebar.divider()
+st.sidebar.subheader("🛡️ 倉位風控與基本面門檻")
+max_risk_usd = st.sidebar.number_input("單筆最大可承受虧損 (美元)", min_value=50, max_value=50000, value=500, step=50)
+min_roe = st.sidebar.slider("最低 ROE 要求 (%)", 0, 50, 0)
+max_de = st.sidebar.slider("負債比上限 (D/E %)", 0, 500, 250)
+max_pe = st.sidebar.slider("本益比上限 (0=不限)", 0, 150, 0)
+only_pos_fcf = st.sidebar.checkbox("僅顯示「正自由現金流」企業", value=False)
+only_beat_spy = st.sidebar.checkbox("僅顯示「近3個月跑贏大盤」強勢股", value=False)
+
 bundles, spy_3m = load_raw_market_data(cap_choice, custom_list)
 if not bundles: st.warning("⚠️ 暫時未取得數據，請點擊左側刷新重試。"); st.stop()
 df = evaluate_vcp_dynamic(bundles, spy_3m, max_risk_usd, pivot_days, contraction_ratio, max_high_dist)
-with st.sidebar:
 all_sectors = sorted(df['產業'].dropna().unique().tolist())
-selected_sectors = st.multiselect("篩選產業類別", all_sectors, default=all_sectors)
-filtered_df = df[
-(df['目前股價'] >= 15) &
-(df['市值 (億美元)'] >= 10) &
-(df['ROE (%)'] >= min_roe) &
-(df['負債比 (D/E)'] <= max_de) &
-(df['產業'].isin(selected_sectors))
-]
-if max_pe > 0:
-filtered_df = filtered_df[filtered_df['本益比 (P/E)'] <= max_pe]
-if only_pos_fcf:
-filtered_df = filtered_df[filtered_df['自由現金流'] == "正現金流"]
-if only_beat_spy:
-filtered_df = filtered_df[filtered_df['跑贏大盤3M(%)'] > 0]
-if "高度符合" in vcp_filter:
-filtered_df = filtered_df[filtered_df['VCP分數'] >= 4]
-elif "觀察中" in vcp_filter:
-filtered_df = filtered_df[filtered_df['VCP分數'] >= 3]
+selected_sectors = st.sidebar.multiselect("篩選產業類別", all_sectors, default=all_sectors)
+filtered_df = df[(df['目前股價'] >= 15) & (df['市值 (億美元)'] >= 10) & (df['ROE (%)'] >= min_roe) & (df['負債比 (D/E)'] <= max_de) & (df['產業'].isin(selected_sectors))]
+if max_pe > 0: filtered_df = filtered_df[filtered_df['本益比 (P/E)'] <= max_pe]
+if only_pos_fcf: filtered_df = filtered_df[filtered_df['自由現金流'] == "正現金流"]
+if only_beat_spy: filtered_df = filtered_df[filtered_df['跑贏大盤3M(%)'] > 0]
+if "高度符合" in vcp_filter: filtered_df = filtered_df[filtered_df['VCP分數'] >= 4]
+if "觀察中" in vcp_filter: filtered_df = filtered_df[filtered_df['VCP分數'] >= 3]
 filtered_df = filtered_df.sort_values(by=['VCP分數', '距突破點(%)'], ascending=[False, True])
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("掃描優質池 (≥1B / $15+)", f"{len(df)} 檔")
