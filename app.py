@@ -195,7 +195,6 @@ c4.metric("標普500 (SPY) 近3月基準", f"{spy_3m} %")
 st.subheader("📋 VCP 交易決策名單（👆 直接點擊表格左側勾選框或任何一列，下方圖表自動切換）")
 display_df = filtered_df.drop(columns=['VCP分數'])
 
-啟用表格單列點擊選擇事件，直接連動下方圖表
 
 table_event = st.dataframe(display_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
 output = BytesIO()
