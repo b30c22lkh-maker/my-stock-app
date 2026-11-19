@@ -265,17 +265,20 @@ st.session_state.chat_history.append({"role": "user", "content": active_prompt})
 st.chat_message("user").markdown(active_prompt)
 stock_context = f"你是專業華爾街VCP量化交易分析師，請用繁體中文條理分明回答，不要只重複股票代號。市場環境：{market_banner}。標的：{selected_symbol} ({active_row['公司名稱']})。VCP評級：{active_row['VCP評級']}，量能比：{active_row['量能比(%)']}%，跑贏大盤3M：{active_row['跑贏大盤(%)']}%。現價${active_row['目前股價']}，樞紐買點${p_buy}（距買點{active_row['距買點(%)']}%），建議停損${p_stop}（風險{active_row['停損幅度(%)']}%），建議買進{s_shares}股。ROE {active_row['ROE (%)']}%，本益比 {active_row['本益比']}，負債比{active_row['負債比(%)']}%。"
 msgs = [{"role": "system", "content": stock_context}] + st.session_state.chat_history[-6:]
-reply_text = ""
 gh_url = "https://github.ai" + "/inference"
 or_url = "https://openrouter.ai" + "/api/v1"
+reply_text = ""
 
 if "僅使用 OpenRouter" not in ai_mode and gh_clean:
-    try: reply_text = OpenAI(api_key=gh_clean, base_url=gh_url).chat.completions.create(model="gpt-4o-mini", messages=msgs).choices.pop(0).message.content
+    try:
+        stream = OpenAI(api_key=gh_clean, base_url=gh_url, timeout=8.0).chat.completions.create(model="gpt-4o-mini", messages=msgs, stream=True)
+        reply_text = st.chat_message("assistant").write_stream(chunk.choices.pop(0).delta.content for chunk in stream if chunk.choices and chunk.choices.delta.content)
     except Exception: reply_text = ""
 
 if not reply_text and "僅使用 GitHub" not in ai_mode and or_clean:
-    try: reply_text = OpenAI(api_key=or_clean, base_url=or_url).chat.completions.create(model="openrouter/free", messages=msgs).choices.pop(0).message.content
-    except Exception as e: reply_text = f"❌ AI 引擎暫時繁忙，請稍後再試（{e}）"
+    try:
+        stream = OpenAI(api_key=or_clean, base_url=or_url, timeout=15.0).chat.completions.create(model="openrouter/free", messages=msgs, stream=True)
+        reply_text = st.chat_message("assistant").write_stream(chunk.choices.pop(0).delta.content for chunk in stream if chunk.choices and chunk.choices.delta.content)
+    except Exception as e: reply_text = f"❌ AI 引擎暫時繁忙，請稍後再試（{e}）"; st.chat_message("assistant").markdown(reply_text)
 
-st.chat_message("assistant").markdown(reply_text)
 st.session_state.chat_history.append({"role": "assistant", "content": reply_text})
