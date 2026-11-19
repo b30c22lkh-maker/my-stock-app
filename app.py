@@ -172,16 +172,7 @@ def load_raw_market_data(is_hk, extra_tickers):
             except Exception:
                 pass
         with ThreadPoolExecutor(max_workers=3) as executor:
-            bundles = list(executor.map(lambda item: enrich_single_stock(item[0], item[1], is_hk), valid_hists.items()))
-    return [b for b in bundles if b is not None], regime
-
-def load_raw_market_data(is_hk, extra_tickers):
-    regime = get_market_regime(is_hk)
-    all_symbols = get_expanded_candidates(is_hk, extra_tickers)
-    mkt_name = "港股通與恒指成分" if is_hk else "全美活躍100+科技高成長+核心池"
-    with st.spinner(f"⚡ 正在掃描【{mkt_name}】共 {len(all_symbols)} 檔標的與三大財報（首次約 18～22 秒）..."):
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            bundles = list(executor.map(lambda s: fetch_raw_stock_bundle(s, is_hk), all_symbols))
+            bundles = list(executor.map(lambda item: enrich_single_stock(item, item, is_hk), valid_hists.items()))
     return [b for b in bundles if b is not None], regime
 
 def evaluate_vcp_dynamic(bundles, bench_ret, max_risk_amt, pivot_days, contraction_ratio, max_high_dist, is_hk):
@@ -190,33 +181,32 @@ def evaluate_vcp_dynamic(bundles, bench_ret, max_risk_amt, pivot_days, contracti
         symbol, info, price, mcap, hist = b['symbol'], b['info'], b['price'], b['mcap'], b['hist']
         close, high, low, vol = hist['Close'], hist['High'], hist['Low'], hist['Volume']
         rs_vs_idx = round(((close.iloc[-1] - close.iloc[-63]) / close.iloc[-63]) * 100 - bench_ret, 2)
-        sma50, sma150, sma200 = close.rolling(50).mean().iloc[-1], close.rolling(150).mean().iloc[-1], close.rolling(200).mean().iloc[-1]
-        sma200_prev = close.rolling(200).mean().iloc[-20]
-        high_52w = high.max()
-        dist_from_high = ((high_52w - price) / high_52w) * 100
-        range_t1 = (high.iloc[-60:-30].max() - low.iloc[-60:-30].min()) / close.iloc[-60:-30].mean()
-        range_t2 = (high.iloc[-30:-10].max() - low.iloc[-30:-10].min()) / close.iloc[-30:-10].mean()
-        range_t3 = (high.iloc[-10:].max() - low.iloc[-10:].min()) / close.iloc[-10:].mean()
-        vcp_score = 0
-        if price > sma50 and sma50 > sma150 and price > sma200: vcp_score += 1
-        if sma200 > sma200_prev: vcp_score += 1
-        if dist_from_high <= max_high_dist: vcp_score += 1
-        if range_t2 > 0 and range_t3 < (range_t2 * contraction_ratio) and range_t2 <= (range_t1 * 1.1): vcp_score += 1
-        vol_ratio = round((vol.iloc[-5:].mean() / vol.iloc[-50:].mean()) * 100, 0)
-        if vol_ratio <= 90: vcp_score += 1
-        vcp_status = f"🔥 高度 ({vcp_score}/5)" if vcp_score >= 4 else (f"👀 觀察 ({vcp_score}/5)" if vcp_score == 3 else f"一般 ({vcp_score}/5)")
-        pivot_price = round(high.iloc[-pivot_days:].max(), 2)
-        stop_loss = round(low.iloc[-pivot_days:].min() * 0.99, 2)
-        dist_to_pivot = round(((pivot_price - price) / price) * 100, 2)
-        risk_per_share = max(pivot_price - stop_loss, 0.05)
-        stop_loss_pct = round((risk_per_share / pivot_price) * 100, 1)
-        suggested_shares = max((int(max_risk_amt // risk_per_share) // b['lot_size']) * b['lot_size'], b['lot_size']) if (is_hk and pivot_price * b['lot_size'] <= max_risk_amt * 15) else (0 if is_hk else int(max_risk_amt // risk_per_share))
-        row_dict = {'股票代號': symbol, 'VCP評級': vcp_status, 'VCP分數': vcp_score, '目前股價': round(price, 2), '樞紐買點': pivot_price, '距買點(%)': dist_to_pivot, '建議停損': stop_loss, '停損幅度(%)': stop_loss_pct, '建議股數': suggested_shares}
-        if is_hk: row_dict['每手股數'], row_dict['每手入場費(HK$)'] = b['lot_size'], round(pivot_price * b['lot_size'], 0)
-        row_dict.update({'ROE (%)': b['roe_val'], '本益比': b['pe_val'], '負債比(%)': b['de_val'], '量能比(%)': int(vol_ratio), '跑贏大盤(%)': rs_vs_idx, '公司名稱': info.get('shortName', symbol)})
-        rows.append(row_dict)
-    return pd.DataFrame(rows)
-
+sma50, sma150, sma200 = close.rolling(50).mean().iloc[-1], close.rolling(150).mean().iloc[-1], close.rolling(200).mean().iloc[-1]
+sma200_prev = close.rolling(200).mean().iloc[-20]
+high_52w = high.max()
+dist_from_high = ((high_52w - price) / high_52w) * 100
+range_t1 = (high.iloc[-60:-30].max() - low.iloc[-60:-30].min()) / close.iloc[-60:-30].mean()
+range_t2 = (high.iloc[-30:-10].max() - low.iloc[-30:-10].min()) / close.iloc[-30:-10].mean()
+range_t3 = (high.iloc[-10:].max() - low.iloc[-10:].min()) / close.iloc[-10:].mean()
+vcp_score = 0
+if price > sma50 and sma50 > sma150 and price > sma200: vcp_score += 1
+if sma200 > sma200_prev: vcp_score += 1
+if dist_from_high <= max_high_dist: vcp_score += 1
+if range_t2 > 0 and range_t3 < (range_t2 * contraction_ratio) and range_t2 <= (range_t1 * 1.1): vcp_score += 1
+vol_ratio = round((vol.iloc[-5:].mean() / vol.iloc[-50:].mean()) * 100, 0)
+if vol_ratio <= 90: vcp_score += 1
+vcp_status = f"🔥 高度 ({vcp_score}/5)" if vcp_score >= 4 else (f"👀 觀察 ({vcp_score}/5)" if vcp_score == 3 else f"一般 ({vcp_score}/5)")
+pivot_price = round(high.iloc[-pivot_days:].max(), 2)
+stop_loss = round(low.iloc[-pivot_days:].min() * 0.99, 2)
+dist_to_pivot = round(((pivot_price - price) / price) * 100, 2)
+risk_per_share = max(pivot_price - stop_loss, 0.05)
+stop_loss_pct = round((risk_per_share / pivot_price) * 100, 1)
+suggested_shares = max((int(max_risk_amt // risk_per_share) // b['lot_size']) * b['lot_size'], b['lot_size']) if (is_hk and pivot_price * b['lot_size'] <= max_risk_amt * 15) else (0 if is_hk else int(max_risk_amt // risk_per_share))
+row_dict = {'股票代號': symbol, 'VCP評級': vcp_status, 'VCP分數': vcp_score, '目前股價': round(price, 2), '樞紐買點': pivot_price, '距買點(%)': dist_to_pivot, '建議停損': stop_loss, '停損幅度(%)': stop_loss_pct, '建議股數': suggested_shares}
+if is_hk: row_dict['每手股數'], row_dict['每手入場費(HK$)'] = b['lot_size'], round(pivot_price * b['lot_size'], 0)
+row_dict.update({'ROE (%)': b['roe_val'], '本益比': b['pe_val'], '負債比(%)': b['de_val'], '量能比(%)': int(vol_ratio), '跑贏大盤(%)': rs_vs_idx, '公司名稱': info.get('shortName', symbol)})
+rows.append(row_dict)
+return pd.DataFrame(rows)
 st.sidebar.header("🌎 選擇交易市場")
 market_choice = st.sidebar.radio("切換掃描市場", ["🇺🇸 美股市場 (USD)", "🇭🇰 港股市場 (HKD)"], horizontal=True)
 is_hk = "港股" in market_choice
@@ -261,7 +251,7 @@ if "高度符合" in vcp_filter: filtered_df = filtered_df[filtered_df['VCP分�
 if "觀察中" in vcp_filter: filtered_df = filtered_df[filtered_df['VCP分數'] >= 3]
 filtered_df = filtered_df.sort_values(by=['VCP分數', '距買點(%)'], ascending=[False, True]).reset_index(drop=True)
 c1, c2, c3, c4 = st.columns(4)
-c1.metric(f"掃描優質池（上限180檔）", f"{len(df)} 檔")
+c1.metric("掃描優質池（上限180檔）", f"{len(df)} 檔")
 c2.metric("符合風控與手數門檻", f"{len(filtered_df)} 檔")
 vcp_count = len(filtered_df[filtered_df['VCP分數'] >= 4])
 c3.metric("🔥 高度符合 VCP 標的", f"{vcp_count} 檔")
@@ -346,12 +336,9 @@ gh_url = "github.ai" + "/inference"
 or_url = "https://openrouter.ai" + "/api/v1"
 reply_text = ""
 if "僅使用 OpenRouter" not in ai_mode and gh_clean:
-    try: reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in OpenAI(api_key=gh_clean, base_url=gh_url, timeout=8.0).chat.completions.create(model="gpt-4o-mini", messages=msgs, stream=True) for c in chunk.choices if c.delta.content)
-    except Exception: reply_text = ""
-
+try: reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in OpenAI(api_key=gh_clean, base_url=gh_url, timeout=8.0).chat.completions.create(model="gpt-4o-mini", messages=msgs, stream=True) for c in chunk.choices if c.delta.content)
+except Exception: reply_text = ""
 if not reply_text and "僅使用 GitHub" not in ai_mode and or_clean:
-    try: reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in OpenAI(api_key=or_clean, base_url=or_url, timeout=15.0).chat.completions.create(model="openrouter/free", messages=msgs, stream=True) for c in chunk.choices if c.delta.content)
-    except Exception as e: reply_text = f"❌ AI 引擎暫時繁忙，請稍後再試（{e}）"; st.chat_message("assistant").markdown(reply_text)
-
+try: reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in OpenAI(api_key=or_clean, base_url=or_url, timeout=15.0).chat.completions.create(model="openrouter/free", messages=msgs, stream=True) for c in chunk.choices if c.delta.content)
+except Exception as e: reply_text = f"❌ AI 引擎暫時繁忙，請稍後再試（{e}）"; st.chat_message("assistant").markdown(reply_text)
 st.session_state.chat_history.append({"role": "assistant", "content": reply_text})
-
