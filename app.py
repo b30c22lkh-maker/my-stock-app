@@ -147,9 +147,9 @@ custom_list = [t.strip().upper() for t in custom_input.split(",") if t.strip()]
 
 if st.sidebar.button("🔄 強制刷新最新行情", use_container_width=True): st.cache_data.clear(); st.rerun()
 
-exp_ai = st.sidebar.expander("🤖 免費 AI 投資分析師設定 (貼上後按 Enter)", expanded=True)
-ai_provider = exp_ai.selectbox("選擇免費 AI 平台", ["OpenRouter (免費聚合模型通道)", "GitHub Models (微軟免費 GPT-4o)"])
-user_api_key = exp_ai.text_input("貼上 API Key 並按 Enter 確認", type="password", placeholder="貼上 sk-or-v1-... 或 ghp_...")
+or_key = st.secrets.get("OPENROUTER_API_KEY", "")
+gh_key = st.secrets.get("GITHUB_API_KEY", "")
+ai_mode = st.sidebar.selectbox("🤖 AI 引擎模式（已自動載入雲端金鑰）", ["⚡ 雙引擎自動接力 (OpenRouter 優先 ➔ GitHub 備援)", "僅使用 OpenRouter 免費通道", "僅使用 GitHub Models (GPT-4o)"])
 
 exp_vcp = st.sidebar.expander("🎯 VCP 型態引擎參數（即時重算）", expanded=False)
 pivot_days = exp_vcp.slider("樞紐突破與停損觀察天數", 10, 30, 15, step=5)
@@ -264,15 +264,17 @@ user_typed = st.chat_input(f"輸入任何關於 {selected_symbol} 或美股投�
 active_prompt = quick_prompt if quick_prompt else user_typed
 for msg in st.session_state.chat_history: st.chat_message(msg["role"]).markdown(msg["content"])
 if not active_prompt: st.stop()
-if not user_api_key: st.warning("⚠️ 請先在左側邊欄最上方的輸入框貼上你的 OpenRouter 或 GitHub 免費 API Key（貼上後記得按 Enter），即可開始對話！"); st.stop()
+if not or_key and not gh_key: st.warning("⚠️ 請先在 Streamlit 後台 Settings -> Secrets 設定金鑰！"); st.stop()
+
 st.session_state.chat_history.append({"role": "user", "content": active_prompt})
 st.chat_message("user").markdown(active_prompt)
 stock_context = f"你是專業華爾街VCP量化交易分析師，請用繁體中文條理分明回答。市場環境：{market_banner}。標的：{selected_symbol} ({active_row['公司名稱']})，產業：{active_row['產業']}。VCP評級：{active_row['VCP評級']}，量能比：{active_row['量能比(%)']}%，跑贏大盤3M：{active_row['跑贏大盤(%)']}%。現價${active_row['目前股價']}，樞紐買點${p_buy}（距買點{active_row['距買點(%)']}%），建議停損${p_stop}（風險{active_row['停損幅度(%)']}%），建議買進{s_shares}股。ROE {active_row['ROE (%)']}%，PE {active_row['本益比']}，負債比{active_row['負債比']}，現金流：{active_row['自由現金流']}，機構持股{active_row['機構持股(%)']}%。"
-base_url = "openrouter.ai" if "OpenRouter" in ai_provider else "azure.com"
-model_name = "openrouter/free" if "OpenRouter" in ai_provider else "gpt-4o"
-client = OpenAI(api_key=user_api_key.strip(), base_url=base_url)
-resp = client.chat.completions.create(model=model_name, messages=[{"role": "system", "content": stock_context}] + st.session_state.chat_history[-6:])
-reply_text = resp.choices.pop(0).message.content
+msgs = [{"role": "system", "content": stock_context}] + st.session_state.chat_history[-6:]
+
+reply_text = ""
+if "僅使用 GitHub" not in ai_mode and or_key: reply_text = OpenAI(api_key=or_key, base_url="https://openrouter.ai").chat.completions.create(model="openrouter/free", messages=msgs).choices.pop(0).message.content
+if not reply_text and "僅使用 OpenRouter" not in ai_mode and gh_key: reply_text = OpenAI(api_key=gh_key, base_url="https://azure.com").chat.completions.create(model="gpt-4o", messages=msgs).choices.pop(0).message.content
+
 st.chat_message("assistant").markdown(reply_text)
 st.session_state.chat_history.append({"role": "assistant", "content": reply_text})
 
