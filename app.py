@@ -284,4 +284,4 @@ fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
 fig.update_layout(xaxis_rangeslider_visible=False, height=780, template="plotly_white", showlegend=True)
 st.plotly_chart(fig, use_container_width=True)
 
-END OF APP
+
