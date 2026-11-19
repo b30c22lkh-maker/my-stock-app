@@ -8,11 +8,12 @@ from plotly.subplots import make_subplots
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from io import BytesIO
+from openai import OpenAI
 import time
 
-st.set_page_config(page_title="全美優質潛力股與 VCP 交易終端機 Pro+", page_icon="🏆", layout="wide")
+st.set_page_config(page_title="全美優質潛力股與 VCP 交易終端機 AI版", page_icon="🏆", layout="wide")
 
-st.title("🏆 全美優質潛力股與 VCP 實戰交易終端機")
+st.title("🏆 全美優質潛力股與 VCP 實戰交易終端機 (雙引擎 AI 分析師版)")
 
 FALLBACK_CANDIDATES = [
     'NVDA', 'AAPL', 'MSFT', 'GOOGL', 'META', 'AMZN', 'TSLA', 'AVGO', 'ORCL', 'CRM',
@@ -154,12 +155,15 @@ custom_list = [t.strip().upper() for t in custom_input.split(",") if t.strip()]
 
 if st.sidebar.button("🔄 強制刷新最新行情", use_container_width=True): st.cache_data.clear(); st.rerun()
 
-exp_vcp = st.sidebar.expander("🎯 VCP 型態引擎參數（即時重算）", expanded=True)
+exp_ai = st.sidebar.expander("🤖 免費 AI 投資分析師設定 (雙美系免費引擎)", expanded=True)
+ai_provider = exp_ai.selectbox("選擇免費 AI 平台", ["OpenRouter (免費聚合模型通道)", "GitHub Models (微軟免費 GPT-4o)"])
+user_api_key = exp_ai.text_input("貼上對應的免費 API Key", type="password", placeholder="貼上 sk-or-v1-... 或 ghp_...")
+exp_vcp = st.sidebar.expander("🎯 VCP 型態引擎參數（即時重算）", expanded=False)
 pivot_days = exp_vcp.slider("樞紐突破與停損觀察天數", 10, 30, 15, step=5)
 contraction_ratio = exp_vcp.slider("波動收縮嚴格度 (越小越緊縮)", 0.50, 0.95, 0.75, step=0.05)
 max_high_dist = exp_vcp.slider("距 52 週高點最大距離 (%)", 15, 45, 25, step=5)
 vcp_filter = exp_vcp.radio("VCP 型態篩選", ["全部顯示 (依 VCP 分數排序)", "僅顯示 🔥 高度符合 VCP (4~5分)", "顯示 👀 觀察中以上 (3~5分)"])
-exp_risk = st.sidebar.expander("🛡️ 資金風控設定", expanded=True)
+exp_risk = st.sidebar.expander("🛡️ 資金風控設定", expanded=False)
 max_risk_usd = exp_risk.number_input("單筆最大可承受虧損 (美元)", min_value=50, max_value=50000, value=500, step=50)
 max_stop_pct = exp_risk.slider("最大可接受停損幅度上限 (%)", 3, 25, 15, step=1)
 exp_fund = st.sidebar.expander("📊 籌碼與基本面門檻", expanded=False)
@@ -172,9 +176,9 @@ only_beat_spy = exp_fund.checkbox("僅顯示「近3個月跑贏大盤」強勢�
 bundles, regime = load_raw_market_data(cap_choice, custom_list)
 if not bundles: st.warning("⚠️ 暫時未取得數據，請點擊左側刷新重試。"); st.stop()
 spy_3m, vix_val, tnx_val, spy_above_50, spy_above_200 = regime
-if vix_val < 20 and spy_above_50: st.success(f"🟢 大盤環境紅綠燈：多頭安全區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ SPY站穩50日線（適合按標準風控執行 VCP 突破）")
-elif vix_val > 26 and not spy_above_200: st.error(f"🔴 大盤環境紅綠燈：高風險警戒區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ SPY跌破200日年線（假突破風險高，建議觀望）")
-else: st.warning(f"🟡 大盤環境紅綠燈：震盪觀察區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ 市場處於震盪或修正期（建議減半倉位操作）")
+if vix_val < 20 and spy_above_50: market_banner = f"🟢 大盤環境紅綠燈：多頭安全區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ SPY站穩50日線"; st.success(market_banner)
+elif vix_val > 26 and not spy_above_200: market_banner = f"🔴 大盤環境紅綠燈：高風險警戒區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ SPY跌破200日年線"; st.error(market_banner)
+else: market_banner = f"🟡 大盤環境紅綠燈：震盪觀察區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ 市場處於震盪期"; st.warning(market_banner)
 df = evaluate_vcp_dynamic(bundles, spy_3m, max_risk_usd, pivot_days, contraction_ratio, max_high_dist)
 all_sectors = sorted(df['產業'].dropna().unique().tolist())
 selected_sectors = exp_fund.multiselect("篩選產業類別", all_sectors, default=all_sectors)
@@ -194,6 +198,7 @@ c4.metric("標普500 (SPY) 近3月基準", f"{spy_3m} %")
 st.divider()
 col_left, col_right = st.columns([1.08, 0.92])
 display_df = filtered_df.drop(columns=['VCP分數'])
+col_left.subheader("📋 精選名單（👆 點擊任何一列，右側圖表與 AI 同步切換）")
 styled_df = display_df.style.apply(lambda r: ['background-color: #d4edda; color: #155724; font-weight: bold;' if (c == '距買點(%)' and r[c] <= 2.5) else ('background-color: #f8d7da; color: #721c24; font-weight: bold;' if (c == '停損幅度(%)' and r[c] > 10.0) else '') for c in r.index], axis=1)
 col_cfg = {
 "機構持股(%)": st.column_config.ProgressColumn("機構持股(%)", format="%.1f%%", min_value=0, max_value=100),
@@ -202,7 +207,7 @@ col_cfg = {
 "樞紐買點": st.column_config.NumberColumn("樞紐買點", format="$%.2f"),
 "建議停損": st.column_config.NumberColumn("建議停損", format="$%.2f")
 }
-table_event = col_left.dataframe(styled_df, use_container_width=True, hide_index=True, height=680, on_select="rerun", selection_mode="single-row", column_config=col_cfg)
+table_event = col_left.dataframe(styled_df, use_container_width=True, hide_index=True, height=620, on_select="rerun", selection_mode="single-row", column_config=col_cfg)
 output = BytesIO()
 writer = pd.ExcelWriter(output, engine='openpyxl')
 display_df.to_excel(writer, sheet_name='VCP交易決策名單', index=False)
@@ -246,5 +251,51 @@ fig.add_trace(go.Scatter(x=hist.index, y=hist['Vol_MA50'], mode='lines', name='5
 fig.add_trace(go.Scatter(x=hist.index, y=hist['RSI'], mode='lines', name='RSI', line=dict(color='purple', width=1.5)), row=3, col=1)
 fig.add_hline(y=70, line_dash="dash", line_color="red", row=3, col=1)
 fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
-fig.update_layout(xaxis_rangeslider_visible=False, height=620, template="plotly_white", showlegend=False, margin=dict(l=10, r=10, t=35, b=10))
+fig.update_layout(xaxis_rangeslider_visible=False, height=580, template="plotly_white", showlegend=False, margin=dict(l=10, r=10, t=35, b=10))
 col_right.plotly_chart(fig, use_container_width=True)
+st.divider()
+st.subheader(f"🤖 AI 量化投資分析師（已自動讀取 {selected_symbol} 最新數據）")
+if "chat_history" not in st.session_state: st.session_state.chat_history = []
+q_col1, q_col2, q_col3 = st.columns(3)
+quick_prompt = None
+if q_col1.button(f"🔍 深度健檢 {selected_symbol} 的 VCP 勝率與風險", use_container_width=True): quick_prompt = f"請根據目前數據，深度評估 {selected_symbol} ({active_row['公司名稱']}) 的 VCP 型態、財務體質、機構籌碼與大盤環境，分析它現在突破的勝率與最大風險點。"
+if q_col2.button(f"📋 幫我寫 {selected_symbol} 的分批進場與停利計畫", use_container_width=True): quick_prompt = f"假設我準備在 ${p_buy} 突破時買進 {s_shares} 股 {selected_symbol}，停損設在 ${p_stop}，請幫我設計一份具體的買進確認條件、分批停利目標與移動停損計畫。"
+if q_col3.button("🗑️ 清除對話紀錄", use_container_width=True): st.session_state.chat_history = []; st.rerun()
+user_typed = st.chat_input(f"輸入任何關於 {selected_symbol} 或美股投資的問題（需先在左側貼上 OpenRouter 或 GitHub API Key）...")
+active_prompt = quick_prompt if quick_prompt else user_typed
+for msg in st.session_state.chat_history:
+with st.chat_message(msg["role"]):
+st.markdown(msg["content"])
+if active_prompt:
+if not user_api_key:
+st.warning("⚠️ 請先在左側邊欄最上方的「🤖 免費 AI 投資分析師設定」貼上你的 OpenRouter 或 GitHub 免費 API Key，即可開始對話！")
+else:
+st.session_state.chat_history.append({"role": "user", "content": active_prompt})
+with st.chat_message("user"):
+st.markdown(active_prompt)
+stock_context = f"""
+你是一位專業的華爾街量化交易與 VCP 策略分析師，請用繁體中文回答，條理分明、客觀務實。
+以下是目前系統抓到的即時市場與個股數據：
+- 市場環境：{market_banner}
+- 股票代號：{selected_symbol} ({active_row['公司名稱']})，所屬產業：{active_row['產業']}
+- VCP 型態評級：{active_row['VCP評級']}，近期量能比：{active_row['量能比(%)']}%，跑贏大盤3M：{active_row['跑贏大盤(%)']}%
+- 交易風控參數：目前股價 ${active_row['目前股價']}，樞紐買點 ${p_buy}（距買點 {active_row['距買點(%)']}%），建議停損 ${p_stop}（風險幅度 {active_row['停損幅度(%)']}%），建議買進 {s_shares} 股
+- 基本面與籌碼：ROE {active_row['ROE (%)']}%，本益比 {active_row['本益比']}，負債比 {active_row['負債比']}，自由現金流：{active_row['自由現金流']}，機構持股 {active_row['機構持股(%)']}%，內部人動向：{active_row['內部人動向']}，財報狀態：{active_row['財報防雷']}
+"""
+if "OpenRouter" in ai_provider:
+base_url, model_name = "openrouter.ai", "openrouter/free"
+else:
+base_url, model_name = "azure.com", "gpt-4o"
+try:
+client = OpenAI(api_key=user_api_key.strip(), base_url=base_url)
+with st.chat_message("assistant"):
+with st.spinner("🤖 AI 分析師正在結合即時數據思考中..."):
+resp = client.chat.completions.create(
+model=model_name,
+messages=[{"role": "system", "content": stock_context}] + st.session_state.chat_history[-6:]
+)
+reply_text = resp.choices.message.content
+st.markdown(reply_text)
+st.session_state.chat_history.append({"role": "assistant", "content": reply_text})
+except Exception as e:
+st.error(f"❌ AI 連線失敗，請檢查 API Key 是否正確或是否選對了對應的平台（錯誤訊息：{e}）")
