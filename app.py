@@ -66,105 +66,115 @@ def get_market_regime(is_hk):
     return round(idx_3m_ret, 2), vix_val, tnx_val, idx_above_50, idx_above_200
 
 @st.cache_data(ttl=3600, show_spinner=False)
-@st.cache_data(ttl=3600, show_spinner=False)
 def get_expanded_candidates(is_hk, extra_tickers):
     if is_hk:
         hk_strong = []
         try:
             q_hk = EquityQuery('and', [
                 EquityQuery('eq', ['region', 'hk']),
-                EquityQuery('gt', ['intradayprice', 3]),
-                EquityQuery('gt', ['intradaymarketcap', 10_000_000_000]),
-                EquityQuery('gt', ['avgdailyvol3m', 1000000]),
-                EquityQuery('gt', ['percentchange', -5])
+                EquityQuery('gt', ['intradayprice', 2]),
+                EquityQuery('gt', ['intradaymarketcap', 5_000_000_000]),
+                EquityQuery('gt', ['avgdailyvol3m', 500000])
             ])
-            res_hk = yf.screen(q_hk, size=100, sortField='avgdailyvol3m', sortAsc=False)
+            res_hk = yf.screen(q_hk, size=120, sortField='avgdailyvol3m', sortAsc=False)
             hk_strong = [item.get('symbol') for item in res_hk.get('quotes', []) if item.get('symbol')]
         except Exception:
             hk_strong = []
-        merged = list(dict.fromkeys(extra_tickers + hk_strong + HK_CORE_CANDIDATES))
-        return merged[:180]
+        return list(dict.fromkeys(extra_tickers + hk_strong + HK_CORE_CANDIDATES))[:180]
     
-    dark_horses = []
-    leaders = []
+    dark_horses, leaders, active_backup = [], [], []
     try:
         q_horse = EquityQuery('and', [
             EquityQuery('eq', ['region', 'us']),
             EquityQuery('gt', ['intradayprice', 15]),
             EquityQuery('btwn', ['intradaymarketcap', 1_500_000_000, 20_000_000_000]),
-            EquityQuery('gt', ['avgdailyvol3m', 400000]),
+            EquityQuery('gt', ['avgdailyvol3m', 350000]),
             EquityQuery('gt', ['quarterlyrevenuegrowth', 0.15])
         ])
-        res1 = yf.screen(q_horse, size=70, sortField='avgdailyvol3m', sortAsc=False)
+        res1 = yf.screen(q_horse, size=100, sortField='avgdailyvol3m', sortAsc=False)
         dark_horses = [item.get('symbol') for item in res1.get('quotes', []) if item.get('symbol')]
     except Exception:
-        dark_horses = []
+        pass
 
     try:
         q_lead = EquityQuery('and', [
             EquityQuery('eq', ['region', 'us']),
-            EquityQuery('gt', ['intradayprice', 20]),
+            EquityQuery('gt', ['intradayprice', 15]),
             EquityQuery('gt', ['intradaymarketcap', 20_000_000_000]),
-            EquityQuery('gt', ['avgdailyvol3m', 500000])
+            EquityQuery('gt', ['avgdailyvol3m', 400000])
         ])
-        res2 = yf.screen(q_lead, size=60, sortField='percentchange', sortAsc=False)
+        res2 = yf.screen(q_lead, size=100, sortField='percentchange', sortAsc=False)
         leaders = [item.get('symbol') for item in res2.get('quotes', []) if item.get('symbol')]
     except Exception:
-        leaders = []
+        pass
 
-    merged = list(dict.fromkeys(extra_tickers + dark_horses + leaders + US_CORE_CANDIDATES[:50]))
-    return merged[:180]
+    try:
+        q_act = EquityQuery('and', [
+            EquityQuery('eq', ['region', 'us']),
+            EquityQuery('gt', ['intradayprice', 15]),
+            EquityQuery('gt', ['intradaymarketcap', 1_000_000_000]),
+            EquityQuery('gt', ['avgdailyvol3m', 300000])
+        ])
+        res3 = yf.screen(q_act, size=100, sortField='avgdailyvol3m', sortAsc=False)
+        active_backup = [item.get('symbol') for item in res3.get('quotes', []) if item.get('symbol')]
+    except Exception:
+        pass
+
+    return list(dict.fromkeys(extra_tickers + dark_horses + leaders + active_backup + US_CORE_CANDIDATES))[:180]
+
+def enrich_single_stock(symbol, hist, is_hk):
+    price = float(hist['Close'].iloc[-1])
+    if (not is_hk and price < 15) or (is_hk and price < 1.0): return None
+    info = {}
+    try: info = yf.Ticker(symbol).info or {}
+    except Exception: info = {}
+    
+    mcap = info.get('marketCap') or (5_000_000_000 if is_hk else 15_000_000_000)
+    if not is_hk and mcap < 1_000_000_000: return None
+
+    lot_size = HK_LOT_MAP.get(symbol, info.get('lotSize') or 100) if is_hk else 1
+    roe_val = round(info.get('returnOnEquity') * 100, 2) if info.get('returnOnEquity') is not None else 0.0
+    pe_val = round(info.get('trailingPE'), 2) if info.get('trailingPE') else 0.0
+    de_val = round(info.get('debtToEquity'), 2) if info.get('debtToEquity') is not None else 0.0
+
+    if roe_val == 0 or pe_val == 0 or de_val == 0:
+        try:
+            t = yf.Ticker(symbol)
+            inc, bal = t.income_stmt, t.balance_sheet
+            if inc is not None and not inc.empty and bal is not None and not bal.empty:
+                ni_rows = [r for r in inc.index if 'Net Income' in str(r)]
+                eps_rows = [r for r in inc.index if 'Diluted EPS' in str(r) or 'Basic EPS' in str(r)]
+                eq_rows = [r for r in bal.index if 'Stockholders Equity' in str(r) or 'Total Equity' in str(r)]
+                debt_rows = [r for r in bal.index if 'Total Debt' in str(r)]
+                eq = float(bal.loc[eq_rows.pop(0)].dropna().iloc[-1]) if eq_rows else 0
+                if roe_val == 0 and ni_rows and eq > 0: roe_val = round((float(inc.loc[ni_rows.pop(0)].dropna().iloc[-1]) / eq) * 100, 2)
+                if pe_val == 0 and eps_rows:
+                    eps = float(inc.loc[eps_rows.pop(0)].dropna().iloc[-1])
+                    if eps > 0: pe_val = round(price / eps, 2)
+                if de_val == 0 and debt_rows and eq > 0: de_val = round((float(bal.loc[debt_rows.pop(0)].dropna().iloc[-1]) / eq) * 100, 2)
+        except Exception:
+            pass
+
+    return {'symbol': symbol, 'info': info, 'price': price, 'mcap': mcap, 'lot_size': lot_size, 'lot_cost': round(price * lot_size, 0), 'roe_val': roe_val, 'pe_val': pe_val, 'de_val': de_val, 'hist': hist}
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_raw_stock_bundle(symbol, is_hk):
-    for _ in range(2):
-        try:
-            ticker = yf.Ticker(symbol)
-            hist = ticker.history(period="1y")
-            if len(hist) < 150: return None
-            info = {}
-            try: info = ticker.info or {}
-            except Exception: info = {}
-            
-            price = info.get('currentPrice') or info.get('regularMarketPrice') or float(hist['Close'].iloc[-1])
-            mcap = info.get('marketCap') or (5_000_000_000 if is_hk else 15_000_000_000)
-            if not is_hk and (price < 15 or mcap < 1_000_000_000): return None
-            if is_hk and price < 1.0: return None
-
-            lot_size = HK_LOT_MAP.get(symbol, info.get('lotSize') or 100) if is_hk else 1
-            lot_cost = round(price * lot_size, 0) if is_hk else price
-
-            roe_val = round(info.get('returnOnEquity') * 100, 2) if info.get('returnOnEquity') is not None else 0.0
-            pe_val = round(info.get('trailingPE'), 2) if info.get('trailingPE') else 0.0
-            de_val = round(info.get('debtToEquity'), 2) if info.get('debtToEquity') is not None else 0.0
-
+def load_raw_market_data(is_hk, extra_tickers):
+    regime = get_market_regime(is_hk)
+    all_symbols = get_expanded_candidates(is_hk, extra_tickers)
+    mkt_name = "港股通與恒指成分" if is_hk else "全美高成長黑馬 + 領頭羊 + 核心池"
+    with st.spinner(f"⚡ 正在批次打包下載【{mkt_name}】共 {len(all_symbols)} 檔 K 線與財報（約 15 秒）..."):
+        raw_data = yf.download(all_symbols, period="1y", group_by="ticker", threads=True, progress=False)
+        valid_hists = {}
+        for sym in all_symbols:
             try:
-                inc = ticker.income_stmt
-                bal = ticker.balance_sheet
-                if inc is not None and not inc.empty and bal is not None and not bal.empty:
-                    ni_rows = [r for r in inc.index if 'Net Income' in str(r)]
-                    eps_rows = [r for r in inc.index if 'Diluted EPS' in str(r) or 'Basic EPS' in str(r)]
-                    eq_rows = [r for r in bal.index if 'Stockholders Equity' in str(r) or 'Total Equity' in str(r)]
-                    debt_rows = [r for r in bal.index if 'Total Debt' in str(r)]
-                    eq = float(bal.loc[eq_rows.pop(0)].dropna().iloc[-1]) if eq_rows else 0
-                    if roe_val == 0 and ni_rows and eq > 0:
-                        ni = float(inc.loc[ni_rows.pop(0)].dropna().iloc[-1])
-                        roe_val = round((ni / eq) * 100, 2)
-                    if pe_val == 0 and eps_rows:
-                        eps = float(inc.loc[eps_rows.pop(0)].dropna().iloc[-1])
-                        if eps > 0: pe_val = round(price / eps, 2)
-                    if de_val == 0 and debt_rows and eq > 0:
-                        debt = float(bal.loc[debt_rows.pop(0)].dropna().iloc[-1])
-                        de_val = round((debt / eq) * 100, 2)
+                df_sym = raw_data[sym].dropna(subset=['Close']) if len(all_symbols) > 1 else raw_data.dropna(subset=['Close'])
+                if len(df_sym) >= 150: valid_hists[sym] = df_sym
             except Exception:
                 pass
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            bundles = list(executor.map(lambda item: enrich_single_stock(item[0], item[1], is_hk), valid_hists.items()))
+    return [b for b in bundles if b is not None], regime
 
-            return {'symbol': symbol, 'info': info, 'price': price, 'mcap': mcap, 'lot_size': lot_size, 'lot_cost': lot_cost, 'roe_val': roe_val, 'pe_val': pe_val, 'de_val': de_val, 'hist': hist}
-        except Exception:
-            time.sleep(0.3)
-    return None
-
-@st.cache_data(ttl=3600, show_spinner=False)
 def load_raw_market_data(is_hk, extra_tickers):
     regime = get_market_regime(is_hk)
     all_symbols = get_expanded_candidates(is_hk, extra_tickers)
