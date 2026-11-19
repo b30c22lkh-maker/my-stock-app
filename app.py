@@ -270,12 +270,9 @@ st.chat_message("user").markdown(active_prompt)
 stock_context = f"你是專業華爾街VCP量化交易分析師，請用繁體中文條理分明回答。市場環境：{market_banner}。標的：{selected_symbol} ({active_row['公司名稱']})，產業：{active_row['產業']}。VCP評級：{active_row['VCP評級']}，量能比：{active_row['量能比(%)']}%，跑贏大盤3M：{active_row['跑贏大盤(%)']}%。現價${active_row['目前股價']}，樞紐買點${p_buy}（距買點{active_row['距買點(%)']}%），建議停損${p_stop}（風險{active_row['停損幅度(%)']}%），建議買進{s_shares}股。ROE {active_row['ROE (%)']}%，PE {active_row['本益比']}，負債比{active_row['負債比']}，現金流：{active_row['自由現金流']}，機構持股{active_row['機構持股(%)']}%。"
 base_url = "openrouter.ai" if "OpenRouter" in ai_provider else "azure.com"
 model_name = "openrouter/free" if "OpenRouter" in ai_provider else "gpt-4o"
-try:
 client = OpenAI(api_key=user_api_key.strip(), base_url=base_url)
-with st.spinner("🤖 AI 分析師正在結合即時數據思考中..."):
 resp = client.chat.completions.create(model=model_name, messages=[{"role": "system", "content": stock_context}] + st.session_state.chat_history[-6:])
 reply_text = resp.choices.pop(0).message.content
 st.chat_message("assistant").markdown(reply_text)
 st.session_state.chat_history.append({"role": "assistant", "content": reply_text})
-except Exception as e:
-st.error(f"❌ AI 連線失敗，請檢查 API Key 是否正確或是否選對了對應平台（錯誤訊息：{e}）")
+
