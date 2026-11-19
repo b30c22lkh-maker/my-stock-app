@@ -263,7 +263,7 @@ bundles, regime = load_raw_market_data(cap_choice, custom_list)
 if not bundles: st.warning("⚠️ 暫時未取得數據，請點擊左側刷新重試。"); st.stop()
 spy_3m, vix_val, tnx_val, spy_above_50, spy_above_200 = regime
 
-【網頁頂部大盤紅綠燈橫幅】
+#【網頁頂部大盤紅綠燈橫幅】
 
 if vix_val < 20 and spy_above_50:
 st.success(f"🟢 大盤環境紅綠燈：多頭安全區 ｜ VIX 恐慌指數：{vix_val}（低波動） ｜ 10年期美債殖利率：{tnx_val}% ｜ 標普500站穩50日均線（適合按標準風控執行 VCP 突破）")
