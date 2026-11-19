@@ -1,6 +1,5 @@
 import streamlit as st
 import yfinance as yf
-from yfinance import EquityQuery
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -12,23 +11,17 @@ from openai import OpenAI
 import time
 
 st.set_page_config(page_title="全美優質潛力股與 VCP 交易終端機 AI版", page_icon="🏆", layout="wide")
-
 st.title("🏆 全美優質潛力股與 VCP 實戰交易終端機 (雙引擎 AI 分析師版)")
 
-FALLBACK_CANDIDATES = [
+CORE_CANDIDATES = [
     'NVDA', 'AAPL', 'MSFT', 'GOOGL', 'META', 'AMZN', 'TSLA', 'AVGO', 'ORCL', 'CRM',
     'PLTR', 'APP', 'CELH', 'DUOL', 'CAVA', 'ANET', 'PANW', 'CRWD', 'SNOW', 'DDOG',
-    'NET', 'ZS', 'TTD', 'HUBS', 'MDB', 'SHOP', 'SQ', 'COIN', 'HOOD', 'SOFI',
-    'AFRM', 'UPST', 'NU', 'MELI', 'SE', 'GRAB', 'UBER', 'ABNB', 'BKNG', 'DASH',
-    'NFLX', 'SPOT', 'RBLX', 'DKNG', 'LULU', 'DECK', 'ONON', 'ELF', 'BIRK', 'SHAK',
-    'CMG', 'TXRH', 'WING', 'COST', 'WMT', 'TGT', 'HD', 'LOW', 'TJX', 'ROST',
-    'LLY', 'NVO', 'UNH', 'ISRG', 'VRTX', 'REGN', 'DXCM', 'PODD', 'INSP', 'AXON',
-    'TMDX', 'HIMS', 'VKTX', 'ALNY', 'JPM', 'V', 'MA', 'AXP', 'GS', 'MS',
-    'BLK', 'KKR', 'APO', 'BX', 'IBKR', 'CBOE', 'NDAQ', 'SPGI', 'MCO', 'FICO',
-    'CAT', 'URI', 'PWR', 'ETN', 'VRT', 'GEV', 'GE', 'FIX', 'EME', 'TT',
-    'CARR', 'PH', 'IR', 'FTV', 'AME', 'XOM', 'CVX', 'COP', 'EOG', 'FANG',
-    'TRGP', 'OKE', 'WMB', 'CEG', 'VST', 'NEE', 'FSLR', 'ENPH', 'TSM', 'ASML',
-    'AMD', 'QCOM', 'MU', 'LRCX', 'KLAC', 'AMAT', 'MRVL', 'ARM', 'SMCI', 'DELL'
+    'NET', 'ZS', 'TTD', 'HUBS', 'SHOP', 'COIN', 'HOOD', 'SOFI', 'NU', 'MELI',
+    'UBER', 'ABNB', 'BKNG', 'NFLX', 'SPOT', 'LULU', 'DECK', 'ONON', 'ELF', 'SHAK',
+    'CMG', 'COST', 'WMT', 'HD', 'TJX', 'LLY', 'NVO', 'UNH', 'ISRG', 'VRTX',
+    'DXCM', 'AXON', 'HIMS', 'JPM', 'V', 'MA', 'GS', 'BLK', 'KKR', 'IBKR',
+    'SPGI', 'FICO', 'CAT', 'URI', 'PWR', 'ETN', 'VRT', 'GEV', 'GE', 'FIX',
+    'XOM', 'COP', 'EOG', 'CEG', 'VST', 'NEE', 'TSM', 'ASML', 'AMD', 'MU'
 ]
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -50,69 +43,28 @@ def get_market_regime():
     return round(spy_3m_ret, 2), vix_val, tnx_val, spy_above_50, spy_above_200
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_market_candidates(cap_filter):
-    conditions = [
-        EquityQuery('eq', ['region', 'us']),
-        EquityQuery('gt', ['intradayprice', 15]),
-        EquityQuery('gt', ['intradaymarketcap', 1_000_000_000]),
-        EquityQuery('gt', ['avgdailyvol3m', 300000])
-    ]
-    if cap_filter == "小型潛力股 (10億 ~ 20億美元)": conditions.append(EquityQuery('btwn', ['intradaymarketcap', 1_000_000_000, 2_000_000_000]))
-    elif cap_filter == "中型成長股 (20億 ~ 100億美元)": conditions.append(EquityQuery('btwn', ['intradaymarketcap', 2_000_000_000, 10_000_000_000]))
-    elif cap_filter == "大型企業 (100億美元以上)": conditions.append(EquityQuery('gt', ['intradaymarketcap', 10_000_000_000]))
-    try:
-        res = yf.screen(EquityQuery('and', conditions), size=100, sortField='avgdailyvol3m', sortAsc=False)
-        symbols = [item.get('symbol') for item in res.get('quotes', []) if item.get('symbol')]
-        if len(symbols) >= 10: return symbols
-    except Exception:
-        pass
-    return FALLBACK_CANDIDATES
-
-@st.cache_data(ttl=3600, show_spinner=False)
 def fetch_raw_stock_bundle(symbol):
     for _ in range(2):
         try:
             ticker = yf.Ticker(symbol)
-            info = ticker.info
-            price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose')
-            mcap = info.get('marketCap')
-            if not price or price < 15 or not mcap or mcap < 1_000_000_000: return None
             hist = ticker.history(period="1y")
             if len(hist) < 150: return None
-            earnings_note = "安全"
-            try:
-                cal = ticker.calendar
-                if isinstance(cal, dict) and 'Earnings Date' in cal and len(cal['Earnings Date']) > 0:
-                    days_to_earn = (pd.to_datetime(cal['Earnings Date']).date() - datetime.now().date()).days
-                    if 0 <= days_to_earn <= 10: earnings_note = f"⚠️ {days_to_earn}天後財報"
-                    elif days_to_earn > 10: earnings_note = f"{days_to_earn}天後"
-            except Exception:
-                earnings_note = "未公布"
+            info = ticker.info
+            price = info.get('currentPrice') or info.get('regularMarketPrice') or float(hist['Close'].iloc[-1])
+            mcap = info.get('marketCap') or 10_000_000_000
+            if price < 15 or mcap < 1_000_000_000: return None
             inst_pct = round(info.get('heldPercentInstitutions', 0) * 100, 1) if info.get('heldPercentInstitutions') else 0.0
-            insider_note = "⚪ 正常"
-            try:
-                insiders = ticker.insider_transactions
-                if insiders is not None and not insiders.empty and 'Text' in insiders.columns:
-                    recent_text = " ".join(insiders['Text'].head(10).astype(str).tolist()).lower()
-                    has_buy = ('purchase' in recent_text) or ('buy' in recent_text)
-                    has_sale = ('sale' in recent_text) or ('sell' in recent_text)
-                    if has_buy and not has_sale: insider_note = "🟢 高管買進"
-                    elif has_buy and has_sale: insider_note = "🟡 買賣互見"
-                    elif has_sale: insider_note = "🟠 高管減持"
-            except Exception:
-                insider_note = "⚪ 正常"
-            return {'symbol': symbol, 'info': info, 'price': price, 'mcap': mcap, 'earnings_note': earnings_note, 'inst_pct': inst_pct, 'insider_note': insider_note, 'hist': hist}
+            return {'symbol': symbol, 'info': info, 'price': price, 'mcap': mcap, 'inst_pct': inst_pct, 'hist': hist}
         except Exception:
-            time.sleep(0.3)
+            time.sleep(0.5)
     return None
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_raw_market_data(cap_filter, extra_tickers):
+def load_raw_market_data(extra_tickers):
     regime = get_market_regime()
-    candidates = get_market_candidates(cap_filter)
-    all_symbols = list(dict.fromkeys(extra_tickers + candidates))
-    with st.spinner(f"⚡ 正在掃描大盤紅綠燈與 {len(all_symbols)} 檔市值 ≥ 1B 企業數據（約 20 秒）..."):
-        with ThreadPoolExecutor(max_workers=4) as executor:
+    all_symbols = list(dict.fromkeys(extra_tickers + CORE_CANDIDATES))
+    with st.spinner(f"⚡ 正在高速掃描 {len(all_symbols)} 檔市值 ≥ 1B 潛力股（約 8～12 秒）..."):
+        with ThreadPoolExecutor(max_workers=3) as executor:
             bundles = list(executor.map(fetch_raw_stock_bundle, all_symbols))
     return [b for b in bundles if b is not None], regime
 
@@ -145,12 +97,12 @@ def evaluate_vcp_dynamic(bundles, spy_ret, max_risk_usd, pivot_days, contraction
         suggested_shares = int(max_risk_usd // risk_per_share)
         pe, roe, de, target_price, fcf = info.get('trailingPE'), info.get('returnOnEquity'), info.get('debtToEquity'), info.get('targetMeanPrice'), info.get('freeCashflow')
         upside_pct = round(((target_price - price) / price) * 100, 2) if target_price else None
-        rows.append({'股票代號': symbol, 'VCP評級': vcp_status, 'VCP分數': vcp_score, '目前股價': round(price, 2), '樞紐買點': pivot_price, '距買點(%)': dist_to_pivot, '建議停損': stop_loss, '停損幅度(%)': stop_loss_pct, '建議股數': suggested_shares, '機構持股(%)': b['inst_pct'], '內部人動向': b['insider_note'], '量能比(%)': int(vol_ratio), '跑贏大盤(%)': rs_vs_spy, '財報防雷': b['earnings_note'], 'ROE (%)': round(roe * 100, 2) if roe is not None else 0, '本益比': round(pe, 2) if pe else 0, '負債比': round(de, 2) if de is not None else 0, '目標空間(%)': upside_pct, '市值(億)': round(mcap / 1e9, 2), '公司名稱': info.get('shortName', symbol), '產業': info.get('sector', '其他'), '自由現金流': "正現金流" if (fcf and fcf > 0) else "負/無數據"})
+        rows.append({'股票代號': symbol, 'VCP評級': vcp_status, 'VCP分數': vcp_score, '目前股價': round(price, 2), '樞紐買點': pivot_price, '距買點(%)': dist_to_pivot, '建議停損': stop_loss, '停損幅度(%)': stop_loss_pct, '建議股數': suggested_shares, '機構持股(%)': b['inst_pct'], '量能比(%)': int(vol_ratio), '跑贏大盤(%)': rs_vs_spy, 'ROE (%)': round(roe * 100, 2) if roe is not None else 0, '本益比': round(pe, 2) if pe else 0, '負債比': round(de, 2) if de is not None else 0, '目標空間(%)': upside_pct, '市值(億)': round(mcap / 1e9, 2), '公司名稱': info.get('shortName', symbol), '產業': info.get('sector', '其他'), '自由現金流': "正現金流" if (fcf and fcf > 0) else "負/無數據"})
     return pd.DataFrame(rows)
 
 st.sidebar.header("🎛️ VCP 交易決策控制台")
-cap_choice = st.sidebar.selectbox("🏢 企業規模範圍（≥ 1B）", ["全市場不限規模 (1B / 10億美元以上)", "小型潛力股 (10億 ~ 20億美元)", "中型成長股 (20億 ~ 100億美元)", "大型企業 (100億美元以上)"])
-custom_input = st.sidebar.text_input("🔍 額外自選代號（逗號分隔）", placeholder="例如: PLTR, CELH, NVDA")
+cap_choice = st.sidebar.selectbox("🏢 企業規模篩選（≥ 1B）", ["全市場不限規模 (1B 以上)", "中小型成長股 (10億 ~ 100億美元)", "大型龍頭企業 (100億美元以上)"])
+custom_input = st.sidebar.text_input("🔍 額外自選代號（逗號分隔）", placeholder="例如: SOXL, TSM, AMD")
 custom_list = [t.strip().upper() for t in custom_input.split(",") if t.strip()]
 
 if st.sidebar.button("🔄 強制刷新最新行情", use_container_width=True): st.cache_data.clear(); st.rerun()
@@ -158,14 +110,17 @@ if st.sidebar.button("🔄 強制刷新最新行情", use_container_width=True):
 exp_ai = st.sidebar.expander("🤖 免費 AI 投資分析師設定 (雙美系免費引擎)", expanded=True)
 ai_provider = exp_ai.selectbox("選擇免費 AI 平台", ["OpenRouter (免費聚合模型通道)", "GitHub Models (微軟免費 GPT-4o)"])
 user_api_key = exp_ai.text_input("貼上對應的免費 API Key", type="password", placeholder="貼上 sk-or-v1-... 或 ghp_...")
+
 exp_vcp = st.sidebar.expander("🎯 VCP 型態引擎參數（即時重算）", expanded=False)
 pivot_days = exp_vcp.slider("樞紐突破與停損觀察天數", 10, 30, 15, step=5)
 contraction_ratio = exp_vcp.slider("波動收縮嚴格度 (越小越緊縮)", 0.50, 0.95, 0.75, step=0.05)
 max_high_dist = exp_vcp.slider("距 52 週高點最大距離 (%)", 15, 45, 25, step=5)
 vcp_filter = exp_vcp.radio("VCP 型態篩選", ["全部顯示 (依 VCP 分數排序)", "僅顯示 🔥 高度符合 VCP (4~5分)", "顯示 👀 觀察中以上 (3~5分)"])
+
 exp_risk = st.sidebar.expander("🛡️ 資金風控設定", expanded=False)
 max_risk_usd = exp_risk.number_input("單筆最大可承受虧損 (美元)", min_value=50, max_value=50000, value=500, step=50)
 max_stop_pct = exp_risk.slider("最大可接受停損幅度上限 (%)", 3, 25, 15, step=1)
+
 exp_fund = st.sidebar.expander("📊 籌碼與基本面門檻", expanded=False)
 min_inst = exp_fund.slider("最低機構持股比例 (%)", 0, 90, 0, step=10)
 min_roe = exp_fund.slider("最低 ROE 要求 (%)", 0, 50, 0)
@@ -173,22 +128,32 @@ max_de = exp_fund.slider("負債比上限 (D/E %)", 0, 500, 250)
 max_pe = exp_fund.slider("本益比上限 (0=不限)", 0, 150, 0)
 only_pos_fcf = exp_fund.checkbox("僅顯示「正自由現金流」企業", value=False)
 only_beat_spy = exp_fund.checkbox("僅顯示「近3個月跑贏大盤」強勢股", value=False)
-bundles, regime = load_raw_market_data(cap_choice, custom_list)
-if not bundles: st.warning("⚠️ 暫時未取得數據，請點擊左側刷新重試。"); st.stop()
+
+bundles, regime = load_raw_market_data(custom_list)
+if not bundles: st.warning("⚠️ Yahoo 連線暫時繁忙，請點擊左側「🔄 強制刷新最新行情」重試。"); st.stop()
+
 spy_3m, vix_val, tnx_val, spy_above_50, spy_above_200 = regime
+
 if vix_val < 20 and spy_above_50: market_banner = f"🟢 大盤環境紅綠燈：多頭安全區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ SPY站穩50日線"; st.success(market_banner)
 elif vix_val > 26 and not spy_above_200: market_banner = f"🔴 大盤環境紅綠燈：高風險警戒區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ SPY跌破200日年線"; st.error(market_banner)
 else: market_banner = f"🟡 大盤環境紅綠燈：震盪觀察區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ 市場處於震盪期"; st.warning(market_banner)
+
 df = evaluate_vcp_dynamic(bundles, spy_3m, max_risk_usd, pivot_days, contraction_ratio, max_high_dist)
+
 all_sectors = sorted(df['產業'].dropna().unique().tolist())
 selected_sectors = exp_fund.multiselect("篩選產業類別", all_sectors, default=all_sectors)
+
 filtered_df = df[(df['目前股價'] >= 15) & (df['市值(億)'] >= 10) & (df['停損幅度(%)'] <= max_stop_pct) & (pd.to_numeric(df['機構持股(%)'], errors='coerce').fillna(0) >= min_inst) & (pd.to_numeric(df['ROE (%)'], errors='coerce').fillna(0) >= min_roe) & (pd.to_numeric(df['負債比'], errors='coerce').fillna(0) <= max_de)]
+if cap_choice == "中小型成長股 (10億 ~ 100億美元)": filtered_df = filtered_df[filtered_df['市值(億)'] <= 100]
+elif cap_choice == "大型龍頭企業 (100億美元以上)": filtered_df = filtered_df[filtered_df['市值(億)'] > 100]
 if max_pe > 0: filtered_df = filtered_df[filtered_df['本益比'] <= max_pe]
 if only_pos_fcf: filtered_df = filtered_df[filtered_df['自由現金流'] == "正現金流"]
 if only_beat_spy: filtered_df = filtered_df[filtered_df['跑贏大盤(%)'] > 0]
 if "高度符合" in vcp_filter: filtered_df = filtered_df[filtered_df['VCP分數'] >= 4]
 if "觀察中" in vcp_filter: filtered_df = filtered_df[filtered_df['VCP分數'] >= 3]
+
 filtered_df = filtered_df.sort_values(by=['VCP分數', '距買點(%)'], ascending=[False, True]).reset_index(drop=True)
+
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("掃描優質池 (≥1B / $15+)", f"{len(df)} 檔")
 c2.metric("符合風控強勢股", f"{len(filtered_df)} 檔")
@@ -264,20 +229,18 @@ if q_col3.button("🗑️ 清除對話紀錄", use_container_width=True): st.ses
 user_typed = st.chat_input(f"輸入任何關於 {selected_symbol} 或美股投資的問題（需先在左側貼上 OpenRouter 或 GitHub API Key）...")
 active_prompt = quick_prompt if quick_prompt else user_typed
 for msg in st.session_state.chat_history: st.chat_message(msg["role"]).markdown(msg["content"])
-
 if active_prompt and not user_api_key: st.warning("⚠️ 請先在左側邊欄最上方貼上你的 OpenRouter 或 GitHub 免費 API Key，即可開始對話！")
-
 if active_prompt and user_api_key:
-    st.session_state.chat_history.append({"role": "user", "content": active_prompt})
-    st.chat_message("user").markdown(active_prompt)
-    stock_context = f"你是專業華爾街VCP量化交易分析師，請用繁體中文條理分明回答。市場環境：{market_banner}。標的：{selected_symbol} ({active_row['公司名稱']})，產業：{active_row['產業']}。VCP評級：{active_row['VCP評級']}，量能比：{active_row['量能比(%)']}%，跑贏大盤3M：{active_row['跑贏大盤(%)']}%。現價${active_row['目前股價']}，樞紐買點${p_buy}（距買點{active_row['距買點(%)']}%），建議停損${p_stop}（風險{active_row['停損幅度(%)']}%），建議買進{s_shares}股。ROE {active_row['ROE (%)']}%，PE {active_row['本益比']}，負債比{active_row['負債比']}，現金流：{active_row['自由現金流']}，機構持股{active_row['機構持股(%)']}%，內部人：{active_row['內部人動向']}，財報：{active_row['財報防雷']}。"
-    base_url = "https://openrouter.ai" if "OpenRouter" in ai_provider else "https://azure.com"
-    model_name = "openrouter/free" if "OpenRouter" in ai_provider else "gpt-4o"
-    try:
-        client = OpenAI(api_key=user_api_key.strip(), base_url=base_url)
-        resp = client.chat.completions.create(model=model_name, messages=[{"role": "system", "content": stock_context}] + st.session_state.chat_history[-6:])
-        reply_text = resp.choices.message.content
-        st.chat_message("assistant").markdown(reply_text)
-        st.session_state.chat_history.append({"role": "assistant", "content": reply_text})
-    except Exception as e:
-        st.error(f"❌ AI 連線失敗，請檢查 API Key 是否正確（錯誤訊息：{e}）")
+st.session_state.chat_history.append({"role": "user", "content": active_prompt})
+st.chat_message("user").markdown(active_prompt)
+stock_context = f"你是專業華爾街VCP量化交易分析師，請用繁體中文條理分明回答。市場環境：{market_banner}。標的：{selected_symbol} ({active_row['公司名稱']})，產業：{active_row['產業']}。VCP評級：{active_row['VCP評級']}，量能比：{active_row['量能比(%)']}%，跑贏大盤3M：{active_row['跑贏大盤(%)']}%。現價${active_row['目前股價']}，樞紐買點${p_buy}（距買點{active_row['距買點(%)']}%），建議停損${p_stop}（風險{active_row['停損幅度(%)']}%），建議買進{s_shares}股。ROE {active_row['ROE (%)']}%，PE {active_row['本益比']}，負債比{active_row['負債比']}，現金流：{active_row['自由現金流']}，機構持股{active_row['機構持股(%)']}%。"
+base_url = "openrouter.ai" if "OpenRouter" in ai_provider else "azure.com"
+model_name = "openrouter/free" if "OpenRouter" in ai_provider else "gpt-4o"
+try:
+client = OpenAI(api_key=user_api_key.strip(), base_url=base_url)
+resp = client.chat.completions.create(model=model_name, messages=[{"role": "system", "content": stock_context}] + st.session_state.chat_history[-6:])
+reply_text = resp.choices.message.content
+st.chat_message("assistant").markdown(reply_text)
+st.session_state.chat_history.append({"role": "assistant", "content": reply_text})
+except Exception as e:
+st.error(f"❌ AI 連線失敗，請檢查 API Key 是否正確（錯誤訊息：{e}）")
