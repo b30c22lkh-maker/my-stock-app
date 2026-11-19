@@ -294,10 +294,10 @@ st.subheader("📋 VCP 交易決策與倉位風控名單（依 VCP 分數與接�
 display_df = filtered_df.drop(columns=['VCP分數'])
 st.dataframe(display_df, use_container_width=True, hide_index=True)
 output = BytesIO()
-with pd.ExcelWriter(output, engine='openpyxl') as writer:
+writer = pd.ExcelWriter(output, engine='openpyxl')
 display_df.to_excel(writer, sheet_name='VCP交易決策名單', index=False)
 df.drop(columns=['VCP分數']).to_excel(writer, sheet_name='全市場掃描總表', index=False)
-st.download_button(label="📥 下載 Excel 交易風控報表", data=output.getvalue(), file_name=f"美股VCP交易決策_{pivot_days}日樞紐.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
+writer.close()
 st.divider()
 st.subheader("📊 VCP 突破買點與停損防守線圖表")
 chart_options = display_df['股票代號'].tolist() if len(display_df) > 0 else df['股票代號'].tolist()
