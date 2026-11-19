@@ -224,7 +224,7 @@ if not bundles: st.warning("⚠️ 暫時未取得數據，請點擊左側刷新
 df = evaluate_vcp_dynamic(bundles, spy_3m, max_risk_usd, pivot_days, contraction_ratio, max_high_dist)
 all_sectors = sorted(df['產業'].dropna().unique().tolist())
 selected_sectors = st.sidebar.multiselect("篩選產業類別", all_sectors, default=all_sectors)
-filtered_df = df[(df['目前股價'] >= 15) & (df['市值 (億美元)'] >= 10) & (df['ROE (%)'] >= min_roe) & (df['負債比 (D/E)'] <= max_de) & (df['產業'].isin(selected_sectors))]
+filtered_df = df[(df['目前股價'] >= 15) & (df['市值 (億美元)'] >= 10) & (pd.to_numeric(df['ROE (%)'], errors='coerce').fillna(0) >= min_roe) & (pd.to_numeric(df['負債比 (D/E)'], errors='coerce').fillna(0) <= max_de)]
 if max_pe > 0: filtered_df = filtered_df[filtered_df['本益比 (P/E)'] <= max_pe]
 if only_pos_fcf: filtered_df = filtered_df[filtered_df['自由現金流'] == "正現金流"]
 if only_beat_spy: filtered_df = filtered_df[filtered_df['跑贏大盤3M(%)'] > 0]
