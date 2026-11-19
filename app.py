@@ -242,7 +242,7 @@ if vix_val < 22 and idx_above_50: market_banner = f"🟢 {idx_label}紅綠燈：
 elif vix_val > 28 and not idx_above_200: market_banner = f"🔴 {idx_label}紅綠燈：高風險警戒區 ｜ {vix_label} ｜ 大盤跌破200日年線"; st.error(market_banner)
 else: market_banner = f"🟡 {idx_label}紅綠燈：震盪觀察區 ｜ {vix_label} ｜ 市場處於震盪整理期"; st.warning(market_banner)
 df = evaluate_vcp_dynamic(bundles, bench_3m, max_risk_amt, pivot_days, contraction_ratio, max_high_dist, is_hk)
-filtered_df = df[(df['停損幅度(%)'] <= max_stop_pct) & (df['ROE (%)'] >= min_roe) & (df['負債比(%)'] <= max_de)]
+filtered_df = df[df['股票代號'].isin(custom_list) | ((df['停損幅度(%)'] <= max_stop_pct) & (df['ROE (%)'] >= min_roe) & (df['負債比(%)'] <= max_de))]
 if is_hk: filtered_df = filtered_df[filtered_df['每手入場費(HK$)'] <= max_lot_fee]
 if max_pe > 0: filtered_df = filtered_df[filtered_df['本益比'] <= max_pe]
 if only_beat_spy: filtered_df = filtered_df[filtered_df['跑贏大盤(%)'] > 0]
