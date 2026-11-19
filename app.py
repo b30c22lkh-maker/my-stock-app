@@ -224,9 +224,7 @@ with st.sidebar:
     only_pos_fcf = st.checkbox("僅顯示「正自由現金流」企業", value=False)
     only_beat_spy = st.checkbox("僅顯示「近3個月跑贏大盤」強勢股", value=False)
 bundles, spy_3m = load_raw_market_data(cap_choice, custom_list)
-if not bundles:
-st.warning("⚠️ 暫時未取得數據，請點擊左側「🔄 強制刷新最新行情」重試。")
-st.stop()
+if not bundles: st.warning("⚠️ 暫時未取得數據，請點擊左側刷新重試。"); st.stop()
 df = evaluate_vcp_dynamic(bundles, spy_3m, max_risk_usd, pivot_days, contraction_ratio, max_high_dist)
 with st.sidebar:
 all_sectors = sorted(df['產業'].dropna().unique().tolist())
