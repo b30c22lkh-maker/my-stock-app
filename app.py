@@ -206,7 +206,7 @@ row_dict = {'股票代號': symbol, 'VCP評級': vcp_status, 'VCP分數': vcp_sc
 if is_hk: row_dict['每手股數'], row_dict['每手入場費(HK$)'] = b['lot_size'], round(pivot_price * b['lot_size'], 0)
 row_dict.update({'ROE (%)': b['roe_val'], '本益比': b['pe_val'], '負債比(%)': b['de_val'], '量能比(%)': int(vol_ratio), '跑贏大盤(%)': rs_vs_idx, '公司名稱': info.get('shortName', symbol)})
 rows.append(row_dict)
-return pd.DataFrame(rows)
+    return pd.DataFrame(rows)
 st.sidebar.header("🌎 選擇交易市場")
 market_choice = st.sidebar.radio("切換掃描市場", ["🇺🇸 美股市場 (USD)", "🇭🇰 港股市場 (HKD)"], horizontal=True)
 is_hk = "港股" in market_choice
