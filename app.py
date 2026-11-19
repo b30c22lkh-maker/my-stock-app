@@ -66,38 +66,53 @@ def get_market_regime(is_hk):
     return round(idx_3m_ret, 2), vix_val, tnx_val, idx_above_50, idx_above_200
 
 @st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_expanded_candidates(is_hk, extra_tickers):
     if is_hk:
-        merged = list(dict.fromkeys(extra_tickers + HK_CORE_CANDIDATES))
+        hk_strong = []
+        try:
+            q_hk = EquityQuery('and', [
+                EquityQuery('eq', ['region', 'hk']),
+                EquityQuery('gt', ['intradayprice', 3]),
+                EquityQuery('gt', ['intradaymarketcap', 10_000_000_000]),
+                EquityQuery('gt', ['avgdailyvol3m', 1000000]),
+                EquityQuery('gt', ['percentchange', -5])
+            ])
+            res_hk = yf.screen(q_hk, size=100, sortField='avgdailyvol3m', sortAsc=False)
+            hk_strong = [item.get('symbol') for item in res_hk.get('quotes', []) if item.get('symbol')]
+        except Exception:
+            hk_strong = []
+        merged = list(dict.fromkeys(extra_tickers + hk_strong + HK_CORE_CANDIDATES))
         return merged[:180]
     
-    active_100 = []
-    tech_50 = []
+    dark_horses = []
+    leaders = []
     try:
-        q1 = EquityQuery('and', [
+        q_horse = EquityQuery('and', [
             EquityQuery('eq', ['region', 'us']),
             EquityQuery('gt', ['intradayprice', 15]),
-            EquityQuery('gt', ['intradaymarketcap', 1_000_000_000]),
-            EquityQuery('gt', ['avgdailyvol3m', 300000])
+            EquityQuery('btwn', ['intradaymarketcap', 1_500_000_000, 20_000_000_000]),
+            EquityQuery('gt', ['avgdailyvol3m', 400000]),
+            EquityQuery('gt', ['quarterlyrevenuegrowth', 0.15])
         ])
-        res1 = yf.screen(q1, size=100, sortField='avgdailyvol3m', sortAsc=False)
-        active_100 = [item.get('symbol') for item in res1.get('quotes', []) if item.get('symbol')]
+        res1 = yf.screen(q_horse, size=70, sortField='avgdailyvol3m', sortAsc=False)
+        dark_horses = [item.get('symbol') for item in res1.get('quotes', []) if item.get('symbol')]
     except Exception:
-        active_100 = []
+        dark_horses = []
 
     try:
-        q2 = EquityQuery('and', [
+        q_lead = EquityQuery('and', [
             EquityQuery('eq', ['region', 'us']),
-            EquityQuery('eq', ['sector', 'Technology']),
-            EquityQuery('gt', ['intradayprice', 15]),
-            EquityQuery('gt', ['intradaymarketcap', 1_000_000_000])
+            EquityQuery('gt', ['intradayprice', 20]),
+            EquityQuery('gt', ['intradaymarketcap', 20_000_000_000]),
+            EquityQuery('gt', ['avgdailyvol3m', 500000])
         ])
-        res2 = yf.screen(q2, size=50, sortField='percentchange', sortAsc=False)
-        tech_50 = [item.get('symbol') for item in res2.get('quotes', []) if item.get('symbol')]
+        res2 = yf.screen(q_lead, size=60, sortField='percentchange', sortAsc=False)
+        leaders = [item.get('symbol') for item in res2.get('quotes', []) if item.get('symbol')]
     except Exception:
-        tech_50 = []
+        leaders = []
 
-    merged = list(dict.fromkeys(extra_tickers + active_100 + tech_50 + US_CORE_CANDIDATES))
+    merged = list(dict.fromkeys(extra_tickers + dark_horses + leaders + US_CORE_CANDIDATES[:50]))
     return merged[:180]
 
 @st.cache_data(ttl=3600, show_spinner=False)
