@@ -147,7 +147,6 @@ def evaluate_vcp_dynamic(bundles, spy_ret, max_risk_usd, pivot_days, contraction
         rows.append({'股票代號': symbol, 'VCP評級': vcp_status, 'VCP分數': vcp_score, '目前股價': round(price, 2), '樞紐買點': pivot_price, '距買點(%)': dist_to_pivot, '建議停損': stop_loss, '停損幅度(%)': stop_loss_pct, '建議股數': suggested_shares, '機構持股(%)': b['inst_pct'], '內部人動向': b['insider_note'], '量能比(%)': int(vol_ratio), '跑贏大盤(%)': rs_vs_spy, '財報防雷': b['earnings_note'], 'ROE (%)': round(roe * 100, 2) if roe is not None else 0, '本益比': round(pe, 2) if pe else 0, '負債比': round(de, 2) if de is not None else 0, '目標空間(%)': upside_pct, '市值(億)': round(mcap / 1e9, 2), '公司名稱': info.get('shortName', symbol), '產業': info.get('sector', '其他'), '自由現金流': "正現金流" if (fcf and fcf > 0) else "負/無數據"})
     return pd.DataFrame(rows)
 
-# 4. 側邊欄折疊抽屜收納設計
 st.sidebar.header("🎛️ VCP 交易決策控制台")
 cap_choice = st.sidebar.selectbox("🏢 企業規模範圍（≥ 1B）", ["全市場不限規模 (1B / 10億美元以上)", "小型潛力股 (10億 ~ 20億美元)", "中型成長股 (20億 ~ 100億美元)", "大型企業 (100億美元以上)"])
 custom_input = st.sidebar.text_input("🔍 額外自選代號（逗號分隔）", placeholder="例如: PLTR, CELH, NVDA")
@@ -186,9 +185,6 @@ if only_beat_spy: filtered_df = filtered_df[filtered_df['跑贏大盤(%)'] > 0]
 if "高度符合" in vcp_filter: filtered_df = filtered_df[filtered_df['VCP分數'] >= 4]
 if "觀察中" in vcp_filter: filtered_df = filtered_df[filtered_df['VCP分數'] >= 3]
 filtered_df = filtered_df.sort_values(by=['VCP分數', '距買點(%)'], ascending=[False, True]).reset_index(drop=True)
-
-頂部四大摘要指標
-
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("掃描優質池 (≥1B / $15+)", f"{len(df)} 檔")
 c2.metric("符合風控強勢股", f"{len(filtered_df)} 檔")
@@ -196,14 +192,8 @@ vcp_count = len(filtered_df[filtered_df['VCP分數'] >= 4])
 c3.metric("🔥 高度符合 VCP 標的", f"{vcp_count} 檔")
 c4.metric("標普500 (SPY) 近3月基準", f"{spy_3m} %")
 st.divider()
-
-1. 左右並排看盤主佈局（左邊 52% 放表格，右邊 48% 放交易指令小卡 + K線圖）
-
 col_left, col_right = st.columns([1.08, 0.92])
 display_df = filtered_df.drop(columns=['VCP分數'])
-
-3. 表格視覺化高亮樣式函式
-
 def style_vcp_table(row):
 styles = [''] * len(row)
 cols = list(row.index)
@@ -215,9 +205,6 @@ idx = cols.index('停損幅度(%)')
 if row['停損幅度(%)'] > 10.0: styles[idx] = 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
 return styles
 col_left.subheader("📋 精選名單（👆 點擊任何一列，右側即時切換看圖）")
-
-搭配視覺進度條欄位設定與顏色高亮
-
 styled_df = display_df.style.apply(style_vcp_table, axis=1)
 col_cfg = {
 "機構持股(%)": st.column_config.ProgressColumn("機構持股(%)", format="%.1f%%", min_value=0, max_value=100),
@@ -233,9 +220,6 @@ display_df.to_excel(writer, sheet_name='VCP交易決策名單', index=False)
 df.drop(columns=['VCP分數']).to_excel(writer, sheet_name='全市場掃描總表', index=False)
 writer.close()
 col_left.download_button(label="📥 下載 Excel 交易風控報表", data=output.getvalue(), file_name=f"美股VCP交易決策_{pivot_days}日樞紐.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
-
-讀取點選的股票代號
-
 selected_rows = table_event.selection.rows if (table_event and hasattr(table_event, "selection")) else []
 if len(selected_rows) > 0 and len(display_df) > next(iter(selected_rows)): active_row = display_df.iloc[next(iter(selected_rows))]
 elif len(display_df) > 0: active_row = display_df.iloc
@@ -245,18 +229,12 @@ p_buy = float(active_row['樞紐買點'])
 p_stop = float(active_row['建議停損'])
 s_shares = int(active_row['建議股數'])
 total_capital = round(p_buy * s_shares, 2)
-
-2. 右側上方：專屬「交易執行指令小卡」
-
 col_right.subheader(f"🎯 {selected_symbol} ({active_row['公司名稱']}) 交易計畫")
 m1, m2, m3, m4 = col_right.columns(4)
 m1.metric("突破買進價", f"${p_buy}")
 m2.metric("防守停損價", f"${p_stop}", f"-{active_row['停損幅度(%)']}%", delta_color="inverse")
 m3.metric("建議買進股數", f"{s_shares} 股")
 m4.metric("預計投入本金", f"${total_capital:,.0f}")
-
-右側下方：三層互動式技術圖表
-
 hist = yf.Ticker(selected_symbol).history(period="1y")
 hist['SMA50'] = hist['Close'].rolling(window=50).mean()
 hist['SMA150'] = hist['Close'].rolling(window=150).mean()
