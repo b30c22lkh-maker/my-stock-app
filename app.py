@@ -31,14 +31,9 @@ FALLBACK_CANDIDATES = [
     'AMD', 'QCOM', 'MU', 'LRCX', 'KLAC', 'AMAT', 'MRVL', 'ARM', 'SMCI', 'DELL'
 ]
 
-# 【新增功能 3：大盤環境紅綠燈（VIX + 10年美債 + SPY趨勢）】
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_market_regime():
-    spy_3m_ret = 0.0
-    vix_val = 18.0
-    tnx_val = 4.2
-    spy_above_50 = True
-    spy_above_200 = True
+    spy_3m_ret, vix_val, tnx_val, spy_above_50, spy_above_200 = 0.0, 18.0, 4.2, True, True
     try:
         spy_hist = yf.Ticker("SPY").history(period="1y")
         if len(spy_hist) >= 200:
@@ -47,11 +42,9 @@ def get_market_regime():
             spy_above_50 = spy_close > spy_hist['Close'].rolling(50).mean().iloc[-1]
             spy_above_200 = spy_close > spy_hist['Close'].rolling(200).mean().iloc[-1]
         vix_hist = yf.Ticker("^VIX").history(period="5d")
-        if not vix_hist.empty:
-            vix_val = round(vix_hist['Close'].iloc[-1], 2)
+        if not vix_hist.empty: vix_val = round(vix_hist['Close'].iloc[-1], 2)
         tnx_hist = yf.Ticker("^TNX").history(period="5d")
-        if not tnx_hist.empty:
-            tnx_val = round(tnx_hist['Close'].iloc[-1], 2)
+        if not tnx_hist.empty: tnx_val = round(tnx_hist['Close'].iloc[-1], 2)
     except Exception:
         pass
     return round(spy_3m_ret, 2), vix_val, tnx_val, spy_above_50, spy_above_200
@@ -64,19 +57,13 @@ def get_market_candidates(cap_filter):
         EquityQuery('gt', ['intradaymarketcap', 1_000_000_000]),
         EquityQuery('gt', ['avgdailyvol3m', 300000])
     ]
-    if cap_filter == "小型潛力股 (10億 ~ 20億美元)":
-        conditions.append(EquityQuery('btwn', ['intradaymarketcap', 1_000_000_000, 2_000_000_000]))
-    elif cap_filter == "中型成長股 (20億 ~ 100億美元)":
-        conditions.append(EquityQuery('btwn', ['intradaymarketcap', 2_000_000_000, 10_000_000_000]))
-    elif cap_filter == "大型企業 (100億美元以上)":
-        conditions.append(EquityQuery('gt', ['intradaymarketcap', 10_000_000_000]))
+    if cap_filter == "小型潛力股 (10億 ~ 20億美元)": conditions.append(EquityQuery('btwn', ['intradaymarketcap', 1_000_000_000, 2_000_000_000]))
+    elif cap_filter == "中型成長股 (20億 ~ 100億美元)": conditions.append(EquityQuery('btwn', ['intradaymarketcap', 2_000_000_000, 10_000_000_000]))
+    elif cap_filter == "大型企業 (100億美元以上)": conditions.append(EquityQuery('gt', ['intradaymarketcap', 10_000_000_000]))
     try:
-        q = EquityQuery('and', conditions)
-        res = yf.screen(q, size=100, sortField='avgdailyvol3m', sortAsc=False)
-        quotes = res.get('quotes', [])
-        symbols = [item.get('symbol') for item in quotes if item.get('symbol')]
-        if len(symbols) >= 10:
-            return symbols
+        res = yf.screen(EquityQuery('and', conditions), size=100, sortField='avgdailyvol3m', sortAsc=False)
+        symbols = [item.get('symbol') for item in res.get('quotes', []) if item.get('symbol')]
+        if len(symbols) >= 10: return symbols
     except Exception:
         pass
     return FALLBACK_CANDIDATES
@@ -89,26 +76,18 @@ def fetch_raw_stock_bundle(symbol):
             info = ticker.info
             price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose')
             mcap = info.get('marketCap')
-            if not price or price < 15 or not mcap or mcap < 1_000_000_000:
-                return None
+            if not price or price < 15 or not mcap or mcap < 1_000_000_000: return None
             hist = ticker.history(period="1y")
-            if len(hist) < 150:
-                return None
-            
+            if len(hist) < 150: return None
             earnings_note = "安全"
             try:
                 cal = ticker.calendar
                 if isinstance(cal, dict) and 'Earnings Date' in cal and len(cal['Earnings Date']) > 0:
-                    next_earn = cal['Earnings Date']
-                    days_to_earn = (pd.to_datetime(next_earn).date() - datetime.now().date()).days
-                    if 0 <= days_to_earn <= 10:
-                        earnings_note = f"⚠️ {days_to_earn}天後財報"
-                    elif days_to_earn > 10:
-                        earnings_note = f"{days_to_earn}天後"
+                    days_to_earn = (pd.to_datetime(cal['Earnings Date']).date() - datetime.now().date()).days
+                    if 0 <= days_to_earn <= 10: earnings_note = f"⚠️ {days_to_earn}天後財報"
+                    elif days_to_earn > 10: earnings_note = f"{days_to_earn}天後"
             except Exception:
                 earnings_note = "未公布"
-
-            # 【新增功能 4：抓取機構持股比例與內部人高管交易動向】
             inst_pct = round(info.get('heldPercentInstitutions', 0) * 100, 1) if info.get('heldPercentInstitutions') else 0.0
             insider_note = "⚪ 正常"
             try:
@@ -117,25 +96,12 @@ def fetch_raw_stock_bundle(symbol):
                     recent_text = " ".join(insiders['Text'].head(10).astype(str).tolist()).lower()
                     has_buy = ('purchase' in recent_text) or ('buy' in recent_text)
                     has_sale = ('sale' in recent_text) or ('sell' in recent_text)
-                    if has_buy and not has_sale:
-                        insider_note = "🟢 高管買進"
-                    elif has_buy and has_sale:
-                        insider_note = "🟡 買賣互見"
-                    elif has_sale:
-                        insider_note = "🟠 高管減持"
+                    if has_buy and not has_sale: insider_note = "🟢 高管買進"
+                    elif has_buy and has_sale: insider_note = "🟡 買賣互見"
+                    elif has_sale: insider_note = "🟠 高管減持"
             except Exception:
                 insider_note = "⚪ 正常"
-
-            return {
-                'symbol': symbol,
-                'info': info,
-                'price': price,
-                'mcap': mcap,
-                'earnings_note': earnings_note,
-                'inst_pct': inst_pct,
-                'insider_note': insider_note,
-                'hist': hist
-            }
+            return {'symbol': symbol, 'info': info, 'price': price, 'mcap': mcap, 'earnings_note': earnings_note, 'inst_pct': inst_pct, 'insider_note': insider_note, 'hist': hist}
         except Exception:
             time.sleep(0.3)
     return None
@@ -153,97 +119,42 @@ def load_raw_market_data(cap_filter, extra_tickers):
 def evaluate_vcp_dynamic(bundles, spy_ret, max_risk_usd, pivot_days, contraction_ratio, max_high_dist):
     rows = []
     for b in bundles:
-        symbol = b['symbol']
-        info = b['info']
-        price = b['price']
-        mcap = b['mcap']
-        hist = b['hist']
-        
-        close = hist['Close']
-        high = hist['High']
-        low = hist['Low']
-        vol = hist['Volume']
-        
-        stock_3m_ret = ((close.iloc[-1] - close.iloc[-63]) / close.iloc[-63]) * 100
-        rs_vs_spy = round(stock_3m_ret - spy_ret, 2)
-        
-        sma50 = close.rolling(50).mean().iloc[-1]
-        sma150 = close.rolling(150).mean().iloc[-1]
-        sma200 = close.rolling(200).mean().iloc[-1]
+        symbol, info, price, mcap, hist = b['symbol'], b['info'], b['price'], b['mcap'], b['hist']
+        close, high, low, vol = hist['Close'], hist['High'], hist['Low'], hist['Volume']
+        rs_vs_spy = round(((close.iloc[-1] - close.iloc[-63]) / close.iloc[-63]) * 100 - spy_ret, 2)
+        sma50, sma150, sma200 = close.rolling(50).mean().iloc[-1], close.rolling(150).mean().iloc[-1], close.rolling(200).mean().iloc[-1]
         sma200_prev = close.rolling(200).mean().iloc[-20]
         high_52w = high.max()
         dist_from_high = ((high_52w - price) / high_52w) * 100
-        
         range_t1 = (high.iloc[-60:-30].max() - low.iloc[-60:-30].min()) / close.iloc[-60:-30].mean()
         range_t2 = (high.iloc[-30:-10].max() - low.iloc[-30:-10].min()) / close.iloc[-30:-10].mean()
         range_t3 = (high.iloc[-10:].max() - low.iloc[-10:].min()) / close.iloc[-10:].mean()
-        
         vcp_score = 0
-        if price > sma50 and sma50 > sma150 and price > sma200:
-            vcp_score += 1
-        if sma200 > sma200_prev:
-            vcp_score += 1
-        if dist_from_high <= max_high_dist:
-            vcp_score += 1
-        if range_t2 > 0 and range_t3 < (range_t2 * contraction_ratio) and range_t2 <= (range_t1 * 1.1):
-            vcp_score += 1
+        if price > sma50 and sma50 > sma150 and price > sma200: vcp_score += 1
+        if sma200 > sma200_prev: vcp_score += 1
+        if dist_from_high <= max_high_dist: vcp_score += 1
+        if range_t2 > 0 and range_t3 < (range_t2 * contraction_ratio) and range_t2 <= (range_t1 * 1.1): vcp_score += 1
         vol_ratio = round((vol.iloc[-5:].mean() / vol.iloc[-50:].mean()) * 100, 0)
-        if vol_ratio <= 90:
-            vcp_score += 1
-
-        if vcp_score >= 4:
-            vcp_status = f"🔥 高度符合 ({vcp_score}/5)"
-        elif vcp_score == 3:
-            vcp_status = f"👀 觀察中 ({vcp_score}/5)"
-        else:
-            vcp_status = f"一般 ({vcp_score}/5)"
-
+        if vol_ratio <= 90: vcp_score += 1
+        vcp_status = f"🔥 高度符合 ({vcp_score}/5)" if vcp_score >= 4 else (f"👀 觀察中 ({vcp_score}/5)" if vcp_score == 3 else f"一般 ({vcp_score}/5)")
         pivot_price = round(high.iloc[-pivot_days:].max(), 2)
         stop_loss = round(low.iloc[-pivot_days:].min() * 0.99, 2)
         dist_to_pivot = round(((pivot_price - price) / price) * 100, 2)
-        
         risk_per_share = max(pivot_price - stop_loss, 0.1)
         stop_loss_pct = round((risk_per_share / pivot_price) * 100, 1)
         suggested_shares = int(max_risk_usd // risk_per_share)
-        
-        pe = info.get('trailingPE')
-        roe = info.get('returnOnEquity')
-        de = info.get('debtToEquity')
-        target_price = info.get('targetMeanPrice')
-        fcf = info.get('freeCashflow')
+        pe, roe, de, target_price, fcf = info.get('trailingPE'), info.get('returnOnEquity'), info.get('debtToEquity'), info.get('targetMeanPrice'), info.get('freeCashflow')
         upside_pct = round(((target_price - price) / price) * 100, 2) if target_price else None
-        
-        rows.append({
-            '股票代號': symbol,
-            'VCP型態評級': vcp_status,
-            'VCP分數': vcp_score,
-            '目前股價': round(price, 2),
-            '樞紐突破價': pivot_price,
-            '距突破點(%)': dist_to_pivot,
-            '建議停損價': stop_loss,
-            '停損幅度(%)': stop_loss_pct,
-            '建議買進股數': suggested_shares,
-            '機構持股(%)': b['inst_pct'],
-            '內部人動向': b['insider_note'],
-            '近期量能比(%)': int(vol_ratio),
-            '跑贏大盤3M(%)': rs_vs_spy,
-            '財報防雷': b['earnings_note'],
-'ROE (%)': round(roe * 100, 2) if roe is not None else 0,
-'本益比 (P/E)': round(pe, 2) if pe else 0,
-'負債比 (D/E)': round(de, 2) if de is not None else 0,
-'潛在上漲空間(%)': upside_pct,
-'市值 (億美元)': round(mcap / 1e9, 2),
-'公司名稱': info.get('shortName', symbol),
-'產業': info.get('sector', '其他'),
-'自由現金流': "正現金流" if (fcf and fcf > 0) else "負/無數據",
-'距52週高點(%)': round(dist_from_high, 2)
-})
-return pd.DataFrame(rows)
+        rows.append({'股票代號': symbol, 'VCP型態評級': vcp_status, 'VCP分數': vcp_score, '目前股價': round(price, 2), '樞紐突破價': pivot_price, '距突破點(%)': dist_to_pivot, '建議停損價': stop_loss, '停損幅度(%)': stop_loss_pct, '建議買進股數': suggested_shares, '機構持股(%)': b['inst_pct'], '內部人動向': b['insider_note'], '近期量能比(%)': int(vol_ratio), '跑贏大盤3M(%)': rs_vs_spy, '財報防雷': b['earnings_note'], 'ROE (%)': round(roe * 100, 2) if roe is not None else 0, '本益比 (P/E)': round(pe, 2) if pe else 0, '負債比 (D/E)': round(de, 2) if de is not None else 0, '潛在上漲空間(%)': upside_pct, '市值 (億美元)': round(mcap / 1e9, 2), '公司名稱': info.get('shortName', symbol), '產業': info.get('sector', '其他'), '自由現金流': "正現金流" if (fcf and fcf > 0) else "負/無數據", '距52週高點(%)': round(dist_from_high, 2)})
+    return pd.DataFrame(rows)
+
 st.sidebar.header("🎛️ VCP 交易決策控制台")
 cap_choice = st.sidebar.selectbox("🏢 企業規模範圍（全部 ≥ 1B）", ["全市場不限規模 (1B / 10億美元以上)", "小型潛力股 (10億 ~ 20億美元)", "中型成長股 (20億 ~ 100億美元)", "大型企業 (100億美元以上)"])
 custom_input = st.sidebar.text_input("🔍 額外加入自選代號（逗號分隔）", placeholder="例如: PLTR, CELH, NVDA")
 custom_list = [t.strip().upper() for t in custom_input.split(",") if t.strip()]
+
 if st.sidebar.button("🔄 強制刷新最新行情", use_container_width=True): st.cache_data.clear(); st.rerun()
+
 st.sidebar.divider()
 st.sidebar.subheader("🎯 VCP 型態引擎微調（即時重算）")
 pivot_days = st.sidebar.slider("樞紐突破與停損觀察天數", 10, 30, 15, step=5)
@@ -262,9 +173,6 @@ only_beat_spy = st.sidebar.checkbox("僅顯示「近3個月跑贏大盤」強勢
 bundles, regime = load_raw_market_data(cap_choice, custom_list)
 if not bundles: st.warning("⚠️ 暫時未取得數據，請點擊左側刷新重試。"); st.stop()
 spy_3m, vix_val, tnx_val, spy_above_50, spy_above_200 = regime
-
-#【網頁頂部大盤紅綠燈橫幅】
-
 if vix_val < 20 and spy_above_50: st.success(f"🟢 大盤環境紅綠燈：多頭安全區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ SPY站穩50日線（適合按標準風控執行 VCP 突破）")
 elif vix_val > 26 and not spy_above_200: st.error(f"🔴 大盤環境紅綠燈：高風險警戒區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ SPY跌破200日年線（假突破風險高，建議觀望）")
 else: st.warning(f"🟡 大盤環境紅綠燈：震盪觀察區 ｜ VIX：{vix_val} ｜ 10年美債：{tnx_val}% ｜ 市場處於震盪或修正期（建議減半倉位操作）")
