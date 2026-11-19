@@ -193,7 +193,7 @@ st.divider()
 col_left, col_right = st.columns([1.08, 0.92])
 display_df = filtered_df.drop(columns=['VCP分數'])
 col_left.subheader("📋 精選名單（👆 點擊任何一列，右側圖表與 AI 同步切換）")
-styled_df = display_df.style.apply(lambda r: ['background-color: #d4edda; color: #155724; font-weight: bold;' if (c == '距買點(%)' and r[c] <= 2.5) else ('background-color: #f8d7da; color: #721c24; font-weight: bold;' if (c == '停損幅度(%)' and r[c] > 10.0) else '') for c in r.index], axis=1)
+styled_df = display_df.style.apply(lambda r: ['background-color: #d4edda; color: #155724; font-weight: bold;' if (c == '距買點(%)' and r[c] <= 2.5) else ('background-color: #f8d7da; color: #721c24; font-weight: bold;' if (c == '停損幅度(%)' and r[c] > 10.0) else '') for c in r.index], axis=1).format(precision=2)
 col_cfg = {
 "ROE (%)": st.column_config.ProgressColumn("ROE (%)", format="%.1f%%", min_value=0, max_value=50),
 "目前股價": st.column_config.NumberColumn("目前股價", format="$%.2f"),
