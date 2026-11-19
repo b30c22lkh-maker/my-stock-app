@@ -271,9 +271,12 @@ st.chat_message("user").markdown(active_prompt)
 stock_context = f"你是專業華爾街VCP量化交易分析師，請用繁體中文條理分明回答。市場環境：{market_banner}。標的：{selected_symbol} ({active_row['公司名稱']})，產業：{active_row['產業']}。VCP評級：{active_row['VCP評級']}，量能比：{active_row['量能比(%)']}%，跑贏大盤3M：{active_row['跑贏大盤(%)']}%。現價${active_row['目前股價']}，樞紐買點${p_buy}（距買點{active_row['距買點(%)']}%），建議停損${p_stop}（風險{active_row['停損幅度(%)']}%），建議買進{s_shares}股。ROE {active_row['ROE (%)']}%，PE {active_row['本益比']}，負債比{active_row['負債比']}，現金流：{active_row['自由現金流']}，機構持股{active_row['機構持股(%)']}%。"
 msgs = [{"role": "system", "content": stock_context}] + st.session_state.chat_history[-6:]
 
+or_clean = "".join(c for c in str(or_key) if ord(c) < 128).strip()
+gh_clean = "".join(c for c in str(gh_key) if ord(c) < 128).strip()
 reply_text = ""
-if "僅使用 GitHub" not in ai_mode and or_key: reply_text = OpenAI(api_key=or_key, base_url="https://openrouter.ai").chat.completions.create(model="openrouter/free", messages=msgs).choices.pop(0).message.content
-if not reply_text and "僅使用 OpenRouter" not in ai_mode and gh_key: reply_text = OpenAI(api_key=gh_key, base_url="https://azure.com").chat.completions.create(model="gpt-4o", messages=msgs).choices.pop(0).message.content
+
+if "僅使用 GitHub" not in ai_mode and or_clean: reply_text = OpenAI(api_key=or_clean, base_url="https://openrouter.ai").chat.completions.create(model="openrouter/free", messages=msgs).choices.pop(0).message.content
+if not reply_text and "僅使用 OpenRouter" not in ai_mode and gh_clean: reply_text = OpenAI(api_key=gh_clean, base_url="https://azure.com").chat.completions.create(model="gpt-4o", messages=msgs).choices.pop(0).message.content
 
 st.chat_message("assistant").markdown(reply_text)
 st.session_state.chat_history.append({"role": "assistant", "content": reply_text})
