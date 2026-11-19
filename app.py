@@ -197,7 +197,7 @@ with st.sidebar:
         
     st.divider()
     st.subheader("🎯 VCP 型態引擎微調（即時重算）")
-    pivot_days = st.select_slider("樞紐突破與停損觀察天數", options=, value=15)
+    pivot_days = st.slider("樞紐突破與停損觀察天數", 10, 30, 15, step=5)
     contraction_ratio = st.slider("波動收縮嚴格度 (越小越緊縮)", 0.50, 0.90, 0.70, step=0.05)
     max_high_dist = st.slider("距 52 週高點最大距離 (%)", 15, 40, 25, step=5)
     vcp_filter = st.radio("VCP 型態篩選", ["全部顯示 (依 VCP 分數排序)", "僅顯示 🔥 高度符合 VCP (4~5分)", "顯示 👀 觀察中以上 (3~5分)"])
