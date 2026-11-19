@@ -263,39 +263,21 @@ if q_col2.button(f"📋 幫我寫 {selected_symbol} 的分批進場與停利計�
 if q_col3.button("🗑️ 清除對話紀錄", use_container_width=True): st.session_state.chat_history = []; st.rerun()
 user_typed = st.chat_input(f"輸入任何關於 {selected_symbol} 或美股投資的問題（需先在左側貼上 OpenRouter 或 GitHub API Key）...")
 active_prompt = quick_prompt if quick_prompt else user_typed
-for msg in st.session_state.chat_history:
-with st.chat_message(msg["role"]):
-st.markdown(msg["content"])
-if active_prompt:
-if not user_api_key:
-st.warning("⚠️ 請先在左側邊欄最上方的「🤖 免費 AI 投資分析師設定」貼上你的 OpenRouter 或 GitHub 免費 API Key，即可開始對話！")
-else:
-st.session_state.chat_history.append({"role": "user", "content": active_prompt})
-with st.chat_message("user"):
-st.markdown(active_prompt)
-stock_context = f"""
-你是一位專業的華爾街量化交易與 VCP 策略分析師，請用繁體中文回答，條理分明、客觀務實。
-以下是目前系統抓到的即時市場與個股數據：
-- 市場環境：{market_banner}
-- 股票代號：{selected_symbol} ({active_row['公司名稱']})，所屬產業：{active_row['產業']}
-- VCP 型態評級：{active_row['VCP評級']}，近期量能比：{active_row['量能比(%)']}%，跑贏大盤3M：{active_row['跑贏大盤(%)']}%
-- 交易風控參數：目前股價 ${active_row['目前股價']}，樞紐買點 ${p_buy}（距買點 {active_row['距買點(%)']}%），建議停損 ${p_stop}（風險幅度 {active_row['停損幅度(%)']}%），建議買進 {s_shares} 股
-- 基本面與籌碼：ROE {active_row['ROE (%)']}%，本益比 {active_row['本益比']}，負債比 {active_row['負債比']}，自由現金流：{active_row['自由現金流']}，機構持股 {active_row['機構持股(%)']}%，內部人動向：{active_row['內部人動向']}，財報狀態：{active_row['財報防雷']}
-"""
-if "OpenRouter" in ai_provider:
-base_url, model_name = "openrouter.ai", "openrouter/free"
-else:
-base_url, model_name = "azure.com", "gpt-4o"
-try:
-client = OpenAI(api_key=user_api_key.strip(), base_url=base_url)
-with st.chat_message("assistant"):
-with st.spinner("🤖 AI 分析師正在結合即時數據思考中..."):
-resp = client.chat.completions.create(
-model=model_name,
-messages=[{"role": "system", "content": stock_context}] + st.session_state.chat_history[-6:]
-)
-reply_text = resp.choices.message.content
-st.markdown(reply_text)
-st.session_state.chat_history.append({"role": "assistant", "content": reply_text})
-except Exception as e:
-st.error(f"❌ AI 連線失敗，請檢查 API Key 是否正確或是否選對了對應的平台（錯誤訊息：{e}）")
+for msg in st.session_state.chat_history: st.chat_message(msg["role"]).markdown(msg["content"])
+
+if active_prompt and not user_api_key: st.warning("⚠️ 請先在左側邊欄最上方貼上你的 OpenRouter 或 GitHub 免費 API Key，即可開始對話！")
+
+if active_prompt and user_api_key:
+    st.session_state.chat_history.append({"role": "user", "content": active_prompt})
+    st.chat_message("user").markdown(active_prompt)
+    stock_context = f"你是專業華爾街VCP量化交易分析師，請用繁體中文條理分明回答。市場環境：{market_banner}。標的：{selected_symbol} ({active_row['公司名稱']})，產業：{active_row['產業']}。VCP評級：{active_row['VCP評級']}，量能比：{active_row['量能比(%)']}%，跑贏大盤3M：{active_row['跑贏大盤(%)']}%。現價${active_row['目前股價']}，樞紐買點${p_buy}（距買點{active_row['距買點(%)']}%），建議停損${p_stop}（風險{active_row['停損幅度(%)']}%），建議買進{s_shares}股。ROE {active_row['ROE (%)']}%，PE {active_row['本益比']}，負債比{active_row['負債比']}，現金流：{active_row['自由現金流']}，機構持股{active_row['機構持股(%)']}%，內部人：{active_row['內部人動向']}，財報：{active_row['財報防雷']}。"
+    base_url = "https://openrouter.ai" if "OpenRouter" in ai_provider else "https://azure.com"
+    model_name = "openrouter/free" if "OpenRouter" in ai_provider else "gpt-4o"
+    try:
+        client = OpenAI(api_key=user_api_key.strip(), base_url=base_url)
+        resp = client.chat.completions.create(model=model_name, messages=[{"role": "system", "content": stock_context}] + st.session_state.chat_history[-6:])
+        reply_text = resp.choices.message.content
+        st.chat_message("assistant").markdown(reply_text)
+        st.session_state.chat_history.append({"role": "assistant", "content": reply_text})
+    except Exception as e:
+        st.error(f"❌ AI 連線失敗，請檢查 API Key 是否正確（錯誤訊息：{e}）")
