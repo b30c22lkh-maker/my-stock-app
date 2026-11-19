@@ -194,18 +194,7 @@ c4.metric("標普500 (SPY) 近3月基準", f"{spy_3m} %")
 st.divider()
 col_left, col_right = st.columns([1.08, 0.92])
 display_df = filtered_df.drop(columns=['VCP分數'])
-def style_vcp_table(row):
-styles = [''] * len(row)
-cols = list(row.index)
-if '距買點(%)' in cols:
-idx = cols.index('距買點(%)')
-if row['距買點(%)'] <= 2.5: styles[idx] = 'background-color: #d4edda; color: #155724; font-weight: bold;'
-if '停損幅度(%)' in cols:
-idx = cols.index('停損幅度(%)')
-if row['停損幅度(%)'] > 10.0: styles[idx] = 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
-return styles
-col_left.subheader("📋 精選名單（👆 點擊任何一列，右側即時切換看圖）")
-styled_df = display_df.style.apply(style_vcp_table, axis=1)
+styled_df = display_df.style.apply(lambda r: ['background-color: #d4edda; color: #155724; font-weight: bold;' if (c == '距買點(%)' and r[c] <= 2.5) else ('background-color: #f8d7da; color: #721c24; font-weight: bold;' if (c == '停損幅度(%)' and r[c] > 10.0) else '') for c in r.index], axis=1)
 col_cfg = {
 "機構持股(%)": st.column_config.ProgressColumn("機構持股(%)", format="%.1f%%", min_value=0, max_value=100),
 "ROE (%)": st.column_config.ProgressColumn("ROE (%)", format="%.1f%%", min_value=0, max_value=50),
