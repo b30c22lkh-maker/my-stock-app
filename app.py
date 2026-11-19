@@ -270,11 +270,11 @@ gh_url = "https://github.ai" + "/inference"
 or_url = "https://openrouter.ai" + "/api/v1"
 
 if "僅使用 OpenRouter" not in ai_mode and gh_clean:
-    try: reply_text = OpenAI(api_key=gh_clean, base_url=gh_url).chat.completions.create(model="openai/gpt-4o-mini", messages=msgs).choices.pop(0).message.content
+    try: reply_text = OpenAI(api_key=gh_clean, base_url=gh_url).chat.completions.create(model="gpt-4o-mini", messages=msgs).choices.pop(0).message.content
     except Exception: reply_text = ""
 
 if not reply_text and "僅使用 GitHub" not in ai_mode and or_clean:
-    try: reply_text = OpenAI(api_key=or_clean, base_url=or_url).chat.completions.create(model="meta-llama/llama-3.3-70b-instruct:free", messages=msgs).choices.pop(0).message.content
+    try: reply_text = OpenAI(api_key=or_clean, base_url=or_url).chat.completions.create(model="openrouter/free", messages=msgs).choices.pop(0).message.content
     except Exception as e: reply_text = f"❌ AI 引擎暫時繁忙，請稍後再試（{e}）"
 
 st.chat_message("assistant").markdown(reply_text)
