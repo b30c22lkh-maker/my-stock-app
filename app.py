@@ -10,10 +10,10 @@ from datetime import datetime
 from io import BytesIO
 import time
 
-st.set_page_config(page_title="全美優質潛力股與 VCP 交易決策系統 Pro", page_icon="🏆", layout="wide")
+st.set_page_config(page_title="全美優質潛力股與 VCP 交易決策系統 Pro+", page_icon="🏆", layout="wide")
 
-st.title("🏆 全美優質潛力股與 VCP 實戰交易決策系統 (VCP 引擎進化版)")
-st.markdown("全市場掃描（**市值 ≥ 1B**、**股價 ≥ $15**），支援**動態調整 VCP 收縮參數**、**距突破點百分比預警**與**自動倉位風控**。")
+st.title("🏆 全美優質潛力股與 VCP 實戰交易決策系統 (機構籌碼 + 大盤紅綠燈版)")
+st.markdown("整合 **VIX 大盤紅綠燈**、**機構與高管籌碼動向**、**動態 VCP 收縮引擎**與**自動倉位風控**。")
 
 FALLBACK_CANDIDATES = [
     'NVDA', 'AAPL', 'MSFT', 'GOOGL', 'META', 'AMZN', 'TSLA', 'AVGO', 'ORCL', 'CRM',
@@ -31,15 +31,30 @@ FALLBACK_CANDIDATES = [
     'AMD', 'QCOM', 'MU', 'LRCX', 'KLAC', 'AMAT', 'MRVL', 'ARM', 'SMCI', 'DELL'
 ]
 
+# 【新增功能 3：大盤環境紅綠燈（VIX + 10年美債 + SPY趨勢）】
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_spy_3m_return():
+def get_market_regime():
+    spy_3m_ret = 0.0
+    vix_val = 18.0
+    tnx_val = 4.2
+    spy_above_50 = True
+    spy_above_200 = True
     try:
-        spy_hist = yf.Ticker("SPY").history(period="6mo")
-        if len(spy_hist) >= 63:
-            return ((spy_hist['Close'].iloc[-1] - spy_hist['Close'].iloc[-63]) / spy_hist['Close'].iloc[-63]) * 100
+        spy_hist = yf.Ticker("SPY").history(period="1y")
+        if len(spy_hist) >= 200:
+            spy_close = spy_hist['Close'].iloc[-1]
+            spy_3m_ret = ((spy_close - spy_hist['Close'].iloc[-63]) / spy_hist['Close'].iloc[-63]) * 100
+            spy_above_50 = spy_close > spy_hist['Close'].rolling(50).mean().iloc[-1]
+            spy_above_200 = spy_close > spy_hist['Close'].rolling(200).mean().iloc[-1]
+        vix_hist = yf.Ticker("^VIX").history(period="5d")
+        if not vix_hist.empty:
+            vix_val = round(vix_hist['Close'].iloc[-1], 2)
+        tnx_hist = yf.Ticker("^TNX").history(period="5d")
+        if not tnx_hist.empty:
+            tnx_val = round(tnx_hist['Close'].iloc[-1], 2)
     except Exception:
         pass
-    return 0.0
+    return round(spy_3m_ret, 2), vix_val, tnx_val, spy_above_50, spy_above_200
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_market_candidates(cap_filter):
@@ -93,20 +108,47 @@ def fetch_raw_stock_bundle(symbol):
             except Exception:
                 earnings_note = "未公布"
 
-            return {'symbol': symbol, 'info': info, 'price': price, 'mcap': mcap, 'earnings_note': earnings_note, 'hist': hist}
+            # 【新增功能 4：抓取機構持股比例與內部人高管交易動向】
+            inst_pct = round(info.get('heldPercentInstitutions', 0) * 100, 1) if info.get('heldPercentInstitutions') else 0.0
+            insider_note = "⚪ 正常"
+            try:
+                insiders = ticker.insider_transactions
+                if insiders is not None and not insiders.empty and 'Text' in insiders.columns:
+                    recent_text = " ".join(insiders['Text'].head(10).astype(str).tolist()).lower()
+                    has_buy = ('purchase' in recent_text) or ('buy' in recent_text)
+                    has_sale = ('sale' in recent_text) or ('sell' in recent_text)
+                    if has_buy and not has_sale:
+                        insider_note = "🟢 高管買進"
+                    elif has_buy and has_sale:
+                        insider_note = "🟡 買賣互見"
+                    elif has_sale:
+                        insider_note = "🟠 高管減持"
+            except Exception:
+                insider_note = "⚪ 正常"
+
+            return {
+                'symbol': symbol,
+                'info': info,
+                'price': price,
+                'mcap': mcap,
+                'earnings_note': earnings_note,
+                'inst_pct': inst_pct,
+                'insider_note': insider_note,
+                'hist': hist
+            }
         except Exception:
             time.sleep(0.3)
     return None
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_raw_market_data(cap_filter, extra_tickers):
-    spy_ret = get_spy_3m_return()
+    regime = get_market_regime()
     candidates = get_market_candidates(cap_filter)
     all_symbols = list(dict.fromkeys(extra_tickers + candidates))
-    with st.spinner(f"⚡ 正在載入全市場 {len(all_symbols)} 檔市值 ≥ 1B 企業數據（首次載入約 20 秒）..."):
+    with st.spinner(f"⚡ 正在掃描大盤紅綠燈與 {len(all_symbols)} 檔市值 ≥ 1B 企業籌碼數據（約 20 秒）..."):
         with ThreadPoolExecutor(max_workers=4) as executor:
             bundles = list(executor.map(fetch_raw_stock_bundle, all_symbols))
-    return [b for b in bundles if b is not None], round(spy_ret, 2)
+    return [b for b in bundles if b is not None], regime
 
 def evaluate_vcp_dynamic(bundles, spy_ret, max_risk_usd, pivot_days, contraction_ratio, max_high_dist):
     rows = []
@@ -181,50 +223,58 @@ def evaluate_vcp_dynamic(bundles, spy_ret, max_risk_usd, pivot_days, contraction
             '建議停損價': stop_loss,
             '停損幅度(%)': stop_loss_pct,
             '建議買進股數': suggested_shares,
+            '機構持股(%)': b['inst_pct'],
+            '內部人動向': b['insider_note'],
             '近期量能比(%)': int(vol_ratio),
             '跑贏大盤3M(%)': rs_vs_spy,
             '財報防雷': b['earnings_note'],
-            'ROE (%)': round(roe * 100, 2) if roe is not None else 0,
-            '本益比 (P/E)': round(pe, 2) if pe else 0,
-            '負債比 (D/E)': round(de, 2) if de is not None else 0,
-            '潛在上漲空間(%)': upside_pct,
-            '市值 (億美元)': round(mcap / 1e9, 2),
-            '公司名稱': info.get('shortName', symbol),
-            '產業': info.get('sector', '其他'),
-            '自由現金流': "正現金流" if (fcf and fcf > 0) else "負/無數據",
-            '距52週高點(%)': round(dist_from_high, 2)
-        })
-    return pd.DataFrame(rows)
-
+'ROE (%)': round(roe * 100, 2) if roe is not None else 0,
+'本益比 (P/E)': round(pe, 2) if pe else 0,
+'負債比 (D/E)': round(de, 2) if de is not None else 0,
+'潛在上漲空間(%)': upside_pct,
+'市值 (億美元)': round(mcap / 1e9, 2),
+'公司名稱': info.get('shortName', symbol),
+'產業': info.get('sector', '其他'),
+'自由現金流': "正現金流" if (fcf and fcf > 0) else "負/無數據",
+'距52週高點(%)': round(dist_from_high, 2)
+})
+return pd.DataFrame(rows)
 st.sidebar.header("🎛️ VCP 交易決策控制台")
 cap_choice = st.sidebar.selectbox("🏢 企業規模範圍（全部 ≥ 1B）", ["全市場不限規模 (1B / 10億美元以上)", "小型潛力股 (10億 ~ 20億美元)", "中型成長股 (20億 ~ 100億美元)", "大型企業 (100億美元以上)"])
 custom_input = st.sidebar.text_input("🔍 額外加入自選代號（逗號分隔）", placeholder="例如: PLTR, CELH, NVDA")
 custom_list = [t.strip().upper() for t in custom_input.split(",") if t.strip()]
-
 if st.sidebar.button("🔄 強制刷新最新行情", use_container_width=True): st.cache_data.clear(); st.rerun()
-
 st.sidebar.divider()
 st.sidebar.subheader("🎯 VCP 型態引擎微調（即時重算）")
 pivot_days = st.sidebar.slider("樞紐突破與停損觀察天數", 10, 30, 15, step=5)
 contraction_ratio = st.sidebar.slider("波動收縮嚴格度 (越小越緊縮)", 0.50, 0.95, 0.75, step=0.05)
 max_high_dist = st.sidebar.slider("距 52 週高點最大距離 (%)", 15, 45, 25, step=5)
 vcp_filter = st.sidebar.radio("VCP 型態篩選", ["全部顯示 (依 VCP 分數排序)", "僅顯示 🔥 高度符合 VCP (4~5分)", "顯示 👀 觀察中以上 (3~5分)"])
-
 st.sidebar.divider()
-st.sidebar.subheader("🛡️ 倉位風控與基本面門檻")
+st.sidebar.subheader("🛡️ 倉位風控、籌碼與基本面門檻")
 max_risk_usd = st.sidebar.number_input("單筆最大可承受虧損 (美元)", min_value=50, max_value=50000, value=500, step=50)
+min_inst = st.sidebar.slider("最低機構持股比例 (%)", 0, 90, 0, step=10)
 min_roe = st.sidebar.slider("最低 ROE 要求 (%)", 0, 50, 0)
 max_de = st.sidebar.slider("負債比上限 (D/E %)", 0, 500, 250)
 max_pe = st.sidebar.slider("本益比上限 (0=不限)", 0, 150, 0)
 only_pos_fcf = st.sidebar.checkbox("僅顯示「正自由現金流」企業", value=False)
 only_beat_spy = st.sidebar.checkbox("僅顯示「近3個月跑贏大盤」強勢股", value=False)
-
-bundles, spy_3m = load_raw_market_data(cap_choice, custom_list)
+bundles, regime = load_raw_market_data(cap_choice, custom_list)
 if not bundles: st.warning("⚠️ 暫時未取得數據，請點擊左側刷新重試。"); st.stop()
+spy_3m, vix_val, tnx_val, spy_above_50, spy_above_200 = regime
+
+【網頁頂部大盤紅綠燈橫幅】
+
+if vix_val < 20 and spy_above_50:
+st.success(f"🟢 大盤環境紅綠燈：多頭安全區 ｜ VIX 恐慌指數：{vix_val}（低波動） ｜ 10年期美債殖利率：{tnx_val}% ｜ 標普500站穩50日均線（適合按標準風控執行 VCP 突破）")
+elif vix_val > 26 and not spy_above_200:
+st.error(f"🔴 大盤環境紅綠燈：高風險警戒區 ｜ VIX 恐慌指數：{vix_val}（高度恐慌） ｜ 10年期美債殖利率：{tnx_val}% ｜ 標普500跌破200日年線（假突破風險極高，建議保留現金觀望）")
+else:
+st.warning(f"🟡 大盤環境紅綠燈：震盪觀察區 ｜ VIX 恐慌指數：{vix_val} ｜ 10年期美債殖利率：{tnx_val}% ｜ 市場處於震盪或修正期（建議挑選高度符合 VCP 標的，並將單筆風險金額減半）")
 df = evaluate_vcp_dynamic(bundles, spy_3m, max_risk_usd, pivot_days, contraction_ratio, max_high_dist)
 all_sectors = sorted(df['產業'].dropna().unique().tolist())
 selected_sectors = st.sidebar.multiselect("篩選產業類別", all_sectors, default=all_sectors)
-filtered_df = df[(df['目前股價'] >= 15) & (df['市值 (億美元)'] >= 10) & (pd.to_numeric(df['ROE (%)'], errors='coerce').fillna(0) >= min_roe) & (pd.to_numeric(df['負債比 (D/E)'], errors='coerce').fillna(0) <= max_de)]
+filtered_df = df[(df['目前股價'] >= 15) & (df['市值 (億美元)'] >= 10) & (pd.to_numeric(df['機構持股(%)'], errors='coerce').fillna(0) >= min_inst) & (pd.to_numeric(df['ROE (%)'], errors='coerce').fillna(0) >= min_roe) & (pd.to_numeric(df['負債比 (D/E)'], errors='coerce').fillna(0) <= max_de)]
 if max_pe > 0: filtered_df = filtered_df[filtered_df['本益比 (P/E)'] <= max_pe]
 if only_pos_fcf: filtered_df = filtered_df[filtered_df['自由現金流'] == "正現金流"]
 if only_beat_spy: filtered_df = filtered_df[filtered_df['跑贏大盤3M(%)'] > 0]
@@ -237,7 +287,7 @@ c2.metric("符合條件強勢股", f"{len(filtered_df)} 檔")
 vcp_count = len(filtered_df[filtered_df['VCP分數'] >= 4])
 c3.metric("🔥 高度符合 VCP 標的", f"{vcp_count} 檔")
 c4.metric("標普500 (SPY) 近3月基準", f"{spy_3m} %")
-st.subheader("📋 VCP 交易決策與倉位風控名單（依 VCP 分數與接近突破程度排序）")
+st.subheader("📋 VCP 交易決策、機構籌碼與倉位風控名單")
 display_df = filtered_df.drop(columns=['VCP分數'])
 st.dataframe(display_df, use_container_width=True, hide_index=True)
 output = BytesIO()
