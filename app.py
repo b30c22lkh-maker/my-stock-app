@@ -205,7 +205,6 @@ writer.close()
 st.download_button(label="📥 下載 Excel 交易風控報表", data=output.getvalue(), file_name=f"美股VCP交易決策_{pivot_days}日樞紐.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
 st.divider()
 
-讀取使用者點擊的表格列；若未點擊則預設顯示第 1 檔
 
 selected_rows = table_event.selection.rows if (table_event and hasattr(table_event, "selection")) else []
 if len(selected_rows) > 0 and len(display_df) > selected_rows: selected_symbol = display_df.iloc[selected_rows]['股票代號']
