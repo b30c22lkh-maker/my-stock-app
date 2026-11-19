@@ -12,8 +12,8 @@ import time
 
 st.set_page_config(page_title="全美優質潛力股與 VCP 交易決策系統 Pro+", page_icon="🏆", layout="wide")
 
-st.title("🏆 全美優質潛力股與 VCP 實戰交易決策系統 (機構籌碼 + 大盤紅綠燈版)")
-st.markdown("整合 **VIX 大盤紅綠燈**、**機構與高管籌碼動向**、**動態 VCP 收縮引擎**與**自動倉位風控**。")
+st.title("🏆 全美優質潛力股與 VCP 實戰交易決策系統 (點選表格看圖版)")
+st.markdown("整合 **VIX 大盤紅綠燈**、**機構與高管籌碼動向**、**動態 VCP 收縮引擎**與**點擊表格即時看圖**。")
 
 FALLBACK_CANDIDATES = [
     'NVDA', 'AAPL', 'MSFT', 'GOOGL', 'META', 'AMZN', 'TSLA', 'AVGO', 'ORCL', 'CRM',
@@ -185,16 +185,19 @@ if only_pos_fcf: filtered_df = filtered_df[filtered_df['自由現金流'] == "�
 if only_beat_spy: filtered_df = filtered_df[filtered_df['跑贏大盤3M(%)'] > 0]
 if "高度符合" in vcp_filter: filtered_df = filtered_df[filtered_df['VCP分數'] >= 4]
 if "觀察中" in vcp_filter: filtered_df = filtered_df[filtered_df['VCP分數'] >= 3]
-filtered_df = filtered_df.sort_values(by=['VCP分數', '距突破點(%)'], ascending=[False, True])
+filtered_df = filtered_df.sort_values(by=['VCP分數', '距突破點(%)'], ascending=[False, True]).reset_index(drop=True)
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("掃描優質池 (≥1B / $15+)", f"{len(df)} 檔")
 c2.metric("符合條件強勢股", f"{len(filtered_df)} 檔")
 vcp_count = len(filtered_df[filtered_df['VCP分數'] >= 4])
 c3.metric("🔥 高度符合 VCP 標的", f"{vcp_count} 檔")
 c4.metric("標普500 (SPY) 近3月基準", f"{spy_3m} %")
-st.subheader("📋 VCP 交易決策、機構籌碼與倉位風控名單")
+st.subheader("📋 VCP 交易決策名單（👆 直接點擊表格左側勾選框或任何一列，下方圖表自動切換）")
 display_df = filtered_df.drop(columns=['VCP分數'])
-st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+啟用表格單列點擊選擇事件，直接連動下方圖表
+
+table_event = st.dataframe(display_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
 output = BytesIO()
 writer = pd.ExcelWriter(output, engine='openpyxl')
 display_df.to_excel(writer, sheet_name='VCP交易決策名單', index=False)
@@ -202,9 +205,14 @@ df.drop(columns=['VCP分數']).to_excel(writer, sheet_name='全市場掃描總�
 writer.close()
 st.download_button(label="📥 下載 Excel 交易風控報表", data=output.getvalue(), file_name=f"美股VCP交易決策_{pivot_days}日樞紐.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
 st.divider()
-st.subheader("📊 VCP 突破買點與停損防守線圖表")
-chart_options = display_df['股票代號'].tolist() if len(display_df) > 0 else df['股票代號'].tolist()
-selected_symbol = st.selectbox("請選擇要檢視買賣點位的股票代號：", chart_options)
+
+讀取使用者點擊的表格列；若未點擊則預設顯示第 1 檔
+
+selected_rows = table_event.selection.rows if (table_event and hasattr(table_event, "selection")) else []
+if len(selected_rows) > 0 and len(display_df) > selected_rows: selected_symbol = display_df.iloc[selected_rows]['股票代號']
+elif len(display_df) > 0: selected_symbol = display_df.iloc['股票代號']
+else: selected_symbol = df.iloc['股票代號']
+st.subheader(f"📊 {selected_symbol} — VCP 突破買點與停損防守線圖表")
 hist = yf.Ticker(selected_symbol).history(period="1y")
 hist['SMA50'] = hist['Close'].rolling(window=50).mean()
 hist['SMA150'] = hist['Close'].rolling(window=150).mean()
