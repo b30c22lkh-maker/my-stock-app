@@ -207,9 +207,9 @@ st.divider()
 
 
 selected_rows = table_event.selection.rows if (table_event and hasattr(table_event, "selection")) else []
-if len(selected_rows) > 0 and len(display_df) > selected_rows: selected_symbol = display_df.iloc[selected_rows]['股票代號']
-elif len(display_df) > 0: selected_symbol = display_df.iloc['股票代號']
-else: selected_symbol = df.iloc['股票代號']
+if len(selected_rows) > 0 and len(display_df) > next(iter(selected_rows)): selected_symbol = display_df.iloc[next(iter(selected_rows))]['股票代號']
+elif len(display_df) > 0: selected_symbol = display_df.iloc[0]['股票代號']
+else: selected_symbol = df.iloc[0]['股票代號']
 st.subheader(f"📊 {selected_symbol} — VCP 突破買點與停損防守線圖表")
 hist = yf.Ticker(selected_symbol).history(period="1y")
 hist['SMA50'] = hist['Close'].rolling(window=50).mean()
