@@ -241,6 +241,25 @@ vix_label = "VHSI 恒指波幅" if is_hk else f"VIX：{vix_val} ｜ 10年美債�
 if vix_val < 22 and idx_above_50: market_banner = f"🟢 {idx_label}紅綠燈：多頭安全區 ｜ {vix_label} ｜ 大盤站穩50日線"; st.success(market_banner)
 elif vix_val > 28 and not idx_above_200: market_banner = f"🔴 {idx_label}紅綠燈：高風險警戒區 ｜ {vix_label} ｜ 大盤跌破200日年線"; st.error(market_banner)
 else: market_banner = f"🟡 {idx_label}紅綠燈：震盪觀察區 ｜ {vix_label} ｜ 市場處於震盪整理期"; st.warning(market_banner)
+    @st.cache_data(ttl=3600, show_spinner=False)
+def get_major_indices(hk_mode):
+    items = [("恒生指數", "^HSI"), ("恒生科技(ETF)", "3033.HK"), ("國企指數", "^HSCE"), ("上證綜指", "000001.SS"), ("滬深300", "000300.SS")] if hk_mode else [("標普500", "^GSPC"), ("納斯達克100", "^NDX"), ("道瓊工業", "^DJI"), ("羅素2000", "^RUT"), ("費城半導體", "^SOX")]
+    res = []
+    for name, sym in items:
+        try:
+            h = yf.Ticker(sym).history(period="5d")
+            if len(h) >= 2:
+                curr, prev = float(h['Close'].iloc[-1]), float(h['Close'].iloc[-2])
+                diff = curr - prev
+                pct = (diff / prev) * 100
+                res.append((name, f"{curr:,.2f}" if curr < 100 else f"{curr:,.0f}", f"{diff:+.2f} ({pct:+.2f}%)" if curr < 100 else f"{diff:+.0f} ({pct:+.2f}%)"))
+            else: res.append((name, "N/A", "0 (0.00%)"))
+        except Exception: res.append((name, "N/A", "0 (0.00%)"))
+    return res
+
+idx_cols = st.columns(5)
+for col, (i_name, i_val, i_delta) in zip(idx_cols, get_major_indices(is_hk)): col.metric(i_name, i_val, i_delta)
+
 df = evaluate_vcp_dynamic(bundles, bench_3m, max_risk_amt, pivot_days, contraction_ratio, max_high_dist, is_hk)
 filtered_df = df[df['股票代號'].isin(custom_list) | ((df['停損幅度(%)'] <= max_stop_pct) & (df['ROE (%)'] >= min_roe) & (df['負債比(%)'] <= max_de))]
 if is_hk: filtered_df = filtered_df[filtered_df['每手入場費(HK$)'] <= max_lot_fee]
