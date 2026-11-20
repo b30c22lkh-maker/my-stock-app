@@ -350,16 +350,22 @@ st.session_state.chat_history.append({"role": "user", "content": active_prompt})
 st.chat_message("user").markdown(active_prompt)
 stock_context = f"你是專業{'港股通與' if is_hk else '華爾街'}VCP量化交易分析師，請用繁體中文條理分明回答，不要只重複股票代號。市場環境：{market_banner}。標的：{selected_symbol} ({active_row['公司名稱']})。VCP評級：{active_row['VCP評級']}，量能比：{active_row['量能比(%)']}%，跑贏大盤3M：{active_row['跑贏大盤(%)']}%。現價{curr_sym}{active_row['目前股價']}，樞紐買點{curr_sym}{p_buy}（距買點{active_row['距買點(%)']}%），建議停損{curr_sym}{p_stop}（風險{active_row['停損幅度(%)']}%），建議買進{s_shares}股。ROE {active_row['ROE (%)']}%，本益比 {active_row['本益比']}，負債比{active_row['負債比(%)']}%。"
 msgs = [{"role": "system", "content": stock_context}] + st.session_state.chat_history[-6:]
-gh_url = "github.ai" + "/inference"
-or_url = "https://openrouter.ai" + "/api/v1"
+gh_url = "https" + "://models.github.ai/inference"
+or_url = "https" + "://openrouter.ai/api/v1"
 reply_text = ""
+
 if "僅使用 OpenRouter" not in ai_mode and gh_clean:
-    stream = OpenAI(api_key=gh_clean, base_url=gh_url, timeout=8.0).chat.completions.create(model="gpt-4o-mini", messages=msgs, stream=True)
-    reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in stream for c in chunk.choices if c.delta.content)
+    try:
+        stream = OpenAI(api_key=gh_clean, base_url=gh_url, timeout=8.0).chat.completions.create(model="gpt-4o-mini", messages=msgs, stream=True)
+        reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in stream for c in chunk.choices if c.delta.content)
+    except Exception: reply_text = ""
 
 if not reply_text and "僅使用 GitHub" not in ai_mode and or_clean:
-    stream = OpenAI(api_key=or_clean, base_url=or_url, timeout=15.0).chat.completions.create(model="openrouter/free", messages=msgs, stream=True)
-    reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in stream for c in chunk.choices if c.delta.content)
+    try:
+        stream = OpenAI(api_key=or_clean, base_url=or_url, timeout=15.0).chat.completions.create(model="openrouter/free", messages=msgs, stream=True)
+        reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in stream for c in chunk.choices if c.delta.content)
+    except Exception as e: reply_text = f"❌ AI 引擎暫時繁忙，請稍後再試（{e}）"; st.chat_message("assistant").markdown(reply_text)
 
 st.session_state.chat_history.append({"role": "assistant", "content": reply_text})
+
 
