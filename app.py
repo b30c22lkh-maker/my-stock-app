@@ -241,7 +241,7 @@ vix_label = "VHSI 恒指波幅" if is_hk else f"VIX：{vix_val} ｜ 10年美債�
 if vix_val < 22 and idx_above_50: market_banner = f"🟢 {idx_label}紅綠燈：多頭安全區 ｜ {vix_label} ｜ 大盤站穩50日線"; st.success(market_banner)
 elif vix_val > 28 and not idx_above_200: market_banner = f"🔴 {idx_label}紅綠燈：高風險警戒區 ｜ {vix_label} ｜ 大盤跌破200日年線"; st.error(market_banner)
 else: market_banner = f"🟡 {idx_label}紅綠燈：震盪觀察區 ｜ {vix_label} ｜ 市場處於震盪整理期"; st.warning(market_banner)
-    @st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_major_indices(hk_mode):
     items = [("恒生指數", "^HSI"), ("恒生科技(ETF)", "3033.HK"), ("國企指數", "^HSCE"), ("上證綜指", "000001.SS"), ("滬深300", "000300.SS")] if hk_mode else [("標普500", "^GSPC"), ("納斯達克100", "^NDX"), ("道瓊工業", "^DJI"), ("羅素2000", "^RUT"), ("費城半導體", "^SOX")]
     res = []
