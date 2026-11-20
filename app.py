@@ -248,8 +248,8 @@ def get_major_indices(hk_mode):
     for name, sym in items:
         try:
             fi = yf.Ticker(sym).fast_info
-            curr = float(fi['lastPrice'])
-            prev = float(fi['previousClose'])
+            mult = 1000 if sym == "3033.HK" else 1
+            curr, prev = float(fi['lastPrice']) * mult, float(fi['previousClose']) * mult
             if sym == "^HSTECH" and (not curr or curr == 0):
                 fi = yf.Ticker("3033.HK").fast_info
                 curr, prev = float(fi['lastPrice']), float(fi['previousClose'])
