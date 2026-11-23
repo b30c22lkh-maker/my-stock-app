@@ -207,7 +207,7 @@ def evaluate_vcp_dynamic(bundles, bench_ret, max_risk_amt, pivot_days, contracti
         suggested_shares = max((int(max_risk_amt // risk_per_share) // b['lot_size']) * b['lot_size'], b['lot_size']) if (is_hk and pivot_price * b['lot_size'] <= max_risk_amt * 15) else (0 if is_hk else int(max_risk_amt // risk_per_share))
         row_dict = {'股票代號': symbol, 'VCP評級': vcp_status, 'VCP分數': vcp_score, '目前股價': round(price, 2), '樞紐買點': pivot_price, '距買點(%)': dist_to_pivot, '建議停損': stop_loss, '停損幅度(%)': stop_loss_pct, '建議股數': suggested_shares}
         if is_hk: row_dict['每手股數'], row_dict['每手入場費(HK$)'] = b['lot_size'], round(pivot_price * b['lot_size'], 0)
-        row_dict.update({'ROE (%)': b['roe_val'], '本益比': b['pe_val'], '負債比(%)': b['de_val'], '量能比(%)': int(vol_ratio), '跑贏大盤(%)': rs_vs_idx, '公司名稱': info.get('shortName', symbol)})
+        row_dict.update({'分析師建議': b.get('rec_str', '⚪ 暫無評級'), '目標價': b.get('target_p', 0.0), '目標空間(%)': b.get('upside_pct', 0.0), 'ROE (%)': b['roe_val'], '本益比': b['pe_val'], '負債比(%)': b['de_val'], '量能比(%)': int(vol_ratio), '跑贏大盤(%)': rs_vs_idx, '公司名稱': info.get('shortName', symbol)})
         rows.append(row_dict)
     return pd.DataFrame(rows)
 st.sidebar.header("🌎 選擇交易市場")
