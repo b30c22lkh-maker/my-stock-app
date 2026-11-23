@@ -235,37 +235,38 @@ def load_raw_market_data(is_hk, extra_tickers, fh_key):
     return [b for b in bundles if b is not None], regime
 
 def evaluate_vcp_dynamic(bundles, bench_ret, max_risk_amt, pivot_days, contraction_ratio, max_high_dist, is_hk):
-rows = []
-for b in bundles:
-symbol, info, price, mcap, hist = b['symbol'], b['info'], b['price'], b['mcap'], b['hist']
-close, high, low, vol = hist['Close'], hist['High'], hist['Low'], hist['Volume']
-rs_vs_idx = round(((close.iloc[-1] - close.iloc[-63]) / close.iloc[-63]) * 100 - bench_ret, 2)
-sma50, sma150, sma200 = close.rolling(50).mean().iloc[-1], close.rolling(150).mean().iloc[-1], close.rolling(200).mean().iloc[-1]
-sma200_prev = close.rolling(200).mean().iloc[-20]
-high_52w = high.max()
-dist_from_high = ((high_52w - price) / high_52w) * 100
-range_t1 = (high.iloc[-60:-30].max() - low.iloc[-60:-30].min()) / close.iloc[-60:-30].mean()
-range_t2 = (high.iloc[-30:-10].max() - low.iloc[-30:-10].min()) / close.iloc[-30:-10].mean()
-range_t3 = (high.iloc[-10:].max() - low.iloc[-10:].min()) / close.iloc[-10:].mean()
-vcp_score = 0
-if price > sma50 and sma50 > sma150 and price > sma200: vcp_score += 1
-if sma200 > sma200_prev: vcp_score += 1
-if dist_from_high <= max_high_dist: vcp_score += 1
-if range_t2 > 0 and range_t3 < (range_t2 * contraction_ratio) and range_t2 <= (range_t1 * 1.1): vcp_score += 1
-vol_ratio = round((vol.iloc[-5:].mean() / vol.iloc[-50:].mean()) * 100, 0)
-if vol_ratio <= 90: vcp_score += 1
-vcp_status = f"🔥 高度 ({vcp_score}/5)" if vcp_score >= 4 else (f"👀 觀察 ({vcp_score}/5)" if vcp_score == 3 else f"一般 ({vcp_score}/5)")
-pivot_price = round(high.iloc[-pivot_days:].max(), 2)
-stop_loss = round(low.iloc[-pivot_days:].min() * 0.99, 2)
-dist_to_pivot = round(((pivot_price - price) / price) * 100, 2)
-risk_per_share = max(pivot_price - stop_loss, 0.05)
-stop_loss_pct = round((risk_per_share / pivot_price) * 100, 1)
-suggested_shares = max((int(max_risk_amt // risk_per_share) // b['lot_size']) * b['lot_size'], b['lot_size']) if (is_hk and pivot_price * b['lot_size'] <= max_risk_amt * 15) else (0 if is_hk else int(max_risk_amt // risk_per_share))
-row_dict = {'股票代號': symbol, 'VCP評級': vcp_status, 'VCP分數': vcp_score, '目前股價': round(price, 2), '樞紐買點': pivot_price, '距買點(%)': dist_to_pivot, '建議停損': stop_loss, '停損幅度(%)': stop_loss_pct, '建議股數': suggested_shares}
-if is_hk: row_dict['每手股數'], row_dict['每手入場費(HK$)'] = b['lot_size'], round(pivot_price * b['lot_size'], 0)
-row_dict.update({'投行共識': b['rec_str'], '目標價': b['target_p'], '目標空間(%)': b['upside_pct'], 'ROE (%)': b['roe_val'], '本益比': b['pe_val'], '負債比(%)': b['de_val'], '量能比(%)': int(vol_ratio), '跑贏大盤(%)': rs_vs_idx, '公司名稱': info.get('shortName', symbol)})
-rows.append(row_dict)
-return pd.DataFrame(rows)
+    rows = []
+    for b in bundles:
+        symbol, info, price, mcap, hist = b['symbol'], b['info'], b['price'], b['mcap'], b['hist']
+        close, high, low, vol = hist['Close'], hist['High'], hist['Low'], hist['Volume']
+        rs_vs_idx = round(((close.iloc[-1] - close.iloc[-63]) / close.iloc[-63]) * 100 - bench_ret, 2)
+        sma50, sma150, sma200 = close.rolling(50).mean().iloc[-1], close.rolling(150).mean().iloc[-1], close.rolling(200).mean().iloc[-1]
+        sma200_prev = close.rolling(200).mean().iloc[-20]
+        high_52w = high.max()
+        dist_from_high = ((high_52w - price) / high_52w) * 100
+        range_t1 = (high.iloc[-60:-30].max() - low.iloc[-60:-30].min()) / close.iloc[-60:-30].mean()
+        range_t2 = (high.iloc[-30:-10].max() - low.iloc[-30:-10].min()) / close.iloc[-30:-10].mean()
+        range_t3 = (high.iloc[-10:].max() - low.iloc[-10:].min()) / close.iloc[-10:].mean()
+        vcp_score = 0
+        if price > sma50 and sma50 > sma150 and price > sma200: vcp_score += 1
+        if sma200 > sma200_prev: vcp_score += 1
+        if dist_from_high <= max_high_dist: vcp_score += 1
+        if range_t2 > 0 and range_t3 < (range_t2 * contraction_ratio) and range_t2 <= (range_t1 * 1.1): vcp_score += 1
+        vol_ratio = round((vol.iloc[-5:].mean() / vol.iloc[-50:].mean()) * 100, 0)
+        if vol_ratio <= 90: vcp_score += 1
+        vcp_status = f"🔥 高度 ({vcp_score}/5)" if vcp_score >= 4 else (f"👀 觀察 ({vcp_score}/5)" if vcp_score == 3 else f"一般 ({vcp_score}/5)")
+        pivot_price = round(high.iloc[-pivot_days:].max(), 2)
+        stop_loss = round(low.iloc[-pivot_days:].min() * 0.99, 2)
+        dist_to_pivot = round(((pivot_price - price) / price) * 100, 2)
+        risk_per_share = max(pivot_price - stop_loss, 0.05)
+        stop_loss_pct = round((risk_per_share / pivot_price) * 100, 1)
+        suggested_shares = max((int(max_risk_amt // risk_per_share) // b['lot_size']) * b['lot_size'], b['lot_size']) if (is_hk and pivot_price * b['lot_size'] <= max_risk_amt * 15) else (0 if is_hk else int(max_risk_amt // risk_per_share))
+        row_dict = {'股票代號': symbol, 'VCP評級': vcp_status, 'VCP分數': vcp_score, '目前股價': round(price, 2), '樞紐買點': pivot_price, '距買點(%)': dist_to_pivot, '建議停損': stop_loss, '停損幅度(%)': stop_loss_pct, '建議股數': suggested_shares}
+        if is_hk: row_dict['每手股數'], row_dict['每手入場費(HK$)'] = b['lot_size'], round(pivot_price * b['lot_size'], 0)
+        row_dict.update({'投行共識': b['rec_str'], '目標價': b['target_p'], '目標空間(%)': b['upside_pct'], 'ROE (%)': b['roe_val'], '本益比': b['pe_val'], '負債比(%)': b['de_val'], '量能比(%)': int(vol_ratio), '跑贏大盤(%)': rs_vs_idx, '公司名稱': info.get('shortName', symbol)})
+        rows.append(row_dict)
+    return pd.DataFrame(rows)
+
 st.sidebar.header("🌎 選擇交易市場")
 market_choice = st.sidebar.radio("切換掃描市場", ["🇺🇸 美股市場 (USD)", "🇭🇰 港股市場 (HKD)"], horizontal=True)
 is_hk = "港股" in market_choice
