@@ -136,6 +136,10 @@ def enrich_single_stock(symbol, hist, is_hk):
     roe_val = round(info.get('returnOnEquity') * 100, 2) if info.get('returnOnEquity') is not None else 0.0
     pe_val = round(info.get('trailingPE'), 2) if info.get('trailingPE') else 0.0
     de_val = round(info.get('debtToEquity'), 2) if info.get('debtToEquity') is not None else 0.0
+    rec_map = {'strong_buy': '🟢 強力買入', 'buy': '🟢 買入', 'hold': '🟡 持有', 'underperform': '🟠 跑輸大盤', 'sell': '🔴 賣出'}
+    rec_str = rec_map.get(str(info.get('recommendationKey', '')).lower(), '⚪ 暫無評級')
+    target_p = float(info.get('targetMeanPrice')) if info.get('targetMeanPrice') else 0.0
+    upside_pct = round(((target_p - price) / price) * 100, 1) if target_p > 0 else 0.0
 
     if roe_val == 0 or pe_val == 0 or de_val == 0:
         try:
@@ -155,7 +159,7 @@ def enrich_single_stock(symbol, hist, is_hk):
         except Exception:
             pass
 
-    return {'symbol': symbol, 'info': info, 'price': price, 'mcap': mcap, 'lot_size': lot_size, 'lot_cost': round(price * lot_size, 0), 'roe_val': roe_val, 'pe_val': pe_val, 'de_val': de_val, 'hist': hist}
+    return {'symbol': symbol, 'info': info, 'price': price, 'mcap': mcap, 'lot_size': lot_size, 'lot_cost': round(price * lot_size, 0), 'roe_val': roe_val, 'pe_val': pe_val, 'de_val': de_val, 'rec_str': rec_str, 'target_p': round(target_p, 2), 'upside_pct': upside_pct, 'hist': hist}
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_raw_market_data(is_hk, extra_tickers):
