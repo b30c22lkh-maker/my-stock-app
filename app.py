@@ -378,40 +378,53 @@ fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
 fig.update_layout(xaxis_rangeslider_visible=False, height=560, template="plotly_white", showlegend=False, margin=dict(l=10, r=10, t=35, b=10))
 col_right.plotly_chart(fig, use_container_width=True)
 news_list = get_finnhub_news(selected_symbol, fh_key)
-if news_list:
-with col_right.expander(f"📰 {selected_symbol} 最新華爾街頭條新聞（Finnhub 即時情報）", expanded=False):
-for n in news_list: st.markdown(f"- {n.get('headline', '')}}) ({n.get('source', '')})")
+exp_news = col_right.expander(f"📰 {selected_symbol} 最新華爾街頭條新聞（Finnhub 即時情報）", expanded=False)
+for n in news_list: exp_news.markdown(f"- **[{n.get('headline', '')}]({n.get('url', '#')})** *({n.get('source', '')})*")
+
 st.divider()
 st.subheader(f"🤖 AI 量化投資分析師（已自動讀取 {selected_symbol} 財報、投行評級與新聞）")
+
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
+
 q_col1, q_col2, q_col3 = st.columns(3)
 quick_prompt = None
 if q_col1.button(f"🔍 深度健檢 {selected_symbol} 的 VCP 勝率與風險", use_container_width=True): quick_prompt = f"請根據目前數據，深度評估 {selected_symbol} ({active_row['公司名稱']}) 的 VCP 型態、投行共識目標價、ROE、本益比與大盤環境，分析它現在突破的勝率與最大風險點。"
 if q_col2.button(f"📋 幫我寫 {selected_symbol} 的分批進場與停利計畫", use_container_width=True): quick_prompt = f"假設我準備在 {curr_sym}{p_buy} 突破時買進 {s_shares} 股 {selected_symbol}，停損設在 {curr_sym}{p_stop}，請幫我設計一份具體的買進確認條件、分批停利目標與移動停損計畫。"
 if q_col3.button("🗑️ 清除對話紀錄", use_container_width=True): st.session_state.chat_history = []; st.rerun()
+
 user_typed = st.chat_input(f"輸入任何關於 {selected_symbol} 或{'港股' if is_hk else '美股'}投資的問題...")
 active_prompt = quick_prompt if quick_prompt else user_typed
+
 for msg in st.session_state.chat_history: st.chat_message(msg["role"]).markdown(msg["content"])
+
 if not active_prompt: st.stop()
+
 or_clean = "".join(c for c in str(or_key) if ord(c) < 128).strip()
 gh_clean = "".join(c for c in str(gh_key) if ord(c) < 128).strip()
+
 if not or_clean and not gh_clean: st.warning("⚠️ 請先在 Streamlit 後台 Settings -> Secrets 設定 AI 金鑰！"); st.stop()
+
 st.session_state.chat_history.append({"role": "user", "content": active_prompt})
 st.chat_message("user").markdown(active_prompt)
 news_summary = "；".join([n.get('headline', '') for n in news_list]) if news_list else "無近期突發新聞"
 stock_context = f"你是專業{'港股通與' if is_hk else '華爾街'}VCP量化交易分析師，請用繁體中文條理分明回答，不要只重複股票代號。市場環境：{market_banner}。標的：{selected_symbol} ({active_row['公司名稱']})。VCP評級：{active_row['VCP評級']}，量能比：{active_row['量能比(%)']}%，跑贏大盤3M：{active_row['跑贏大盤(%)']}%。現價{curr_sym}{active_row['目前股價']}，樞紐買點{curr_sym}{p_buy}（距買點{active_row['距買點(%)']}%），建議停損{curr_sym}{p_stop}（風險{active_row['停損幅度(%)']}%），建議買進{s_shares}股。投行共識：{active_row['投行共識']}，目標價{curr_sym}{active_row['目標價']}（空間{active_row['目標空間(%)']}%）。ROE {active_row['ROE (%)']}%，本益比 {active_row['本益比']}，負債比{active_row['負債比(%)']}%。近期新聞：{news_summary}。"
 msgs = [{"role": "system", "content": stock_context}] + st.session_state.chat_history[-6:]
+
 gh_url = "https" + "://models.github.ai/inference"
 or_url = "https" + "://openrouter.ai/api/v1"
 reply_text = ""
+
 if "僅使用 OpenRouter" not in ai_mode and gh_clean:
-try:
-stream = OpenAI(api_key=gh_clean, base_url=gh_url, timeout=8.0).chat.completions.create(model="gpt-4o-mini", messages=msgs, stream=True)
-reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in stream for c in chunk.choices if c.delta.content)
-except Exception: reply_text = ""
+    try:
+        stream = OpenAI(api_key=gh_clean, base_url=gh_url, timeout=8.0).chat.completions.create(model="gpt-4o-mini", messages=msgs, stream=True)
+        reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in stream for c in chunk.choices if c.delta.content)
+    except Exception: reply_text = ""
+
 if not reply_text and "僅使用 GitHub" not in ai_mode and or_clean:
-try:
-stream = OpenAI(api_key=or_clean, base_url=or_url, timeout=15.0).chat.completions.create(model="openrouter/free", messages=msgs, stream=True)
-reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in stream for c in chunk.choices if c.delta.content)
-except Exception as e: reply_text = f"❌ AI 引擎暫時繁忙，請稍後再試（{e}）"; st.chat_message("assistant").markdown(reply_text)
+    try:
+        stream = OpenAI(api_key=or_clean, base_url=or_url, timeout=15.0).chat.completions.create(model="openrouter/free", messages=msgs, stream=True)
+        reply_text = st.chat_message("assistant").write_stream(c.delta.content for chunk in stream for c in chunk.choices if c.delta.content)
+    except Exception as e: reply_text = f"❌ AI 引擎暫時繁忙，請稍後再試（{e}）"; st.chat_message("assistant").markdown(reply_text)
+
 st.session_state.chat_history.append({"role": "assistant", "content": reply_text})
+
