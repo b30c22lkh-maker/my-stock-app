@@ -178,38 +178,45 @@ def enrich_single_stock(symbol, hist, is_hk, fh_key):
     price = float(hist['Close'].iloc[-1])
     if (not is_hk and price < 15) or (is_hk and price < 1.0): return None
     info = {}
-try: info = yf.Ticker(symbol).info or {}
-except Exception: info = {}
-mcap = info.get('marketCap') or (5_000_000_000 if is_hk else 15_000_000_000)
-if not is_hk and mcap < 1_000_000_000: return None
-lot_size = HK_LOT_MAP.get(symbol, info.get('lotSize') or 100) if is_hk else 1
-roe_val = round(info.get('returnOnEquity') * 100, 2) if info.get('returnOnEquity') is not None else 0.0
-pe_val = round(info.get('trailingPE'), 2) if info.get('trailingPE') else 0.0
-de_val = round(info.get('debtToEquity'), 2) if info.get('debtToEquity') is not None else 0.0
-if roe_val == 0 or pe_val == 0 or de_val == 0:
-try:
-t = yf.Ticker(symbol)
-inc, bal = t.income_stmt, t.balance_sheet
-if inc is not None and not inc.empty and bal is not None and not bal.empty:
-ni_rows = [r for r in inc.index if 'Net Income' in str(r)]
-eps_rows = [r for r in inc.index if 'Diluted EPS' in str(r) or 'Basic EPS' in str(r)]
-eq_rows = [r for r in bal.index if 'Stockholders Equity' in str(r) or 'Total Equity' in str(r)]
-debt_rows = [r for r in bal.index if 'Total Debt' in str(r)]
-eq = float(bal.loc[eq_rows.pop(0)].dropna().iloc[-1]) if eq_rows else 0
-if roe_val == 0 and ni_rows and eq > 0: roe_val = round((float(inc.loc[ni_rows.pop(0)].dropna().iloc[-1]) / eq) * 100, 2)
-if pe_val == 0 and eps_rows:
-eps = float(inc.loc[eps_rows.pop(0)].dropna().iloc[-1])
-if eps > 0: pe_val = round(price / eps, 2)
-if de_val == 0 and debt_rows and eq > 0: de_val = round((float(bal.loc[debt_rows.pop(0)].dropna().iloc[-1]) / eq) * 100, 2)
-except Exception: pass
-rec_str, target_p = get_finnhub_consensus(symbol, fh_key)
-if not rec_str:
-rec_map = {'strong_buy': '🟢 強力買入', 'buy': '🟢 買入', 'hold': '🟡 持有', 'underperform': '🟠 減持', 'sell': '🔴 賣出'}
-rec_str = rec_map.get(str(info.get('recommendationKey', '')).lower(), '⚪ 暫無評級')
-if target_p == 0.0 and info.get('targetMeanPrice'):
-target_p = float(info.get('targetMeanPrice'))
-upside_pct = round(((target_p - price) / price) * 100, 1) if target_p > 0 else 0.0
-return {'symbol': symbol, 'info': info, 'price': price, 'mcap': mcap, 'lot_size': lot_size, 'lot_cost': round(price * lot_size, 0), 'roe_val': roe_val, 'pe_val': pe_val, 'de_val': de_val, 'rec_str': rec_str, 'target_p': round(target_p, 2), 'upside_pct': upside_pct, 'hist': hist}
+    try: info = yf.Ticker(symbol).info or {}
+    except Exception: info = {}
+    
+    mcap = info.get('marketCap') or (5_000_000_000 if is_hk else 15_000_000_000)
+    if not is_hk and mcap < 1_000_000_000: return None
+
+    lot_size = HK_LOT_MAP.get(symbol, info.get('lotSize') or 100) if is_hk else 1
+    roe_val = round(info.get('returnOnEquity') * 100, 2) if info.get('returnOnEquity') is not None else 0.0
+    pe_val = round(info.get('trailingPE'), 2) if info.get('trailingPE') else 0.0
+    de_val = round(info.get('debtToEquity'), 2) if info.get('debtToEquity') is not None else 0.0
+
+    if roe_val == 0 or pe_val == 0 or de_val == 0:
+        try:
+            t = yf.Ticker(symbol)
+            inc, bal = t.income_stmt, t.balance_sheet
+            if inc is not None and not inc.empty and bal is not None and not bal.empty:
+                ni_rows = [r for r in inc.index if 'Net Income' in str(r)]
+                eps_rows = [r for r in inc.index if 'Diluted EPS' in str(r) or 'Basic EPS' in str(r)]
+                eq_rows = [r for r in bal.index if 'Stockholders Equity' in str(r) or 'Total Equity' in str(r)]
+                debt_rows = [r for r in bal.index if 'Total Debt' in str(r)]
+                eq = float(bal.loc[eq_rows.pop(0)].dropna().iloc[-1]) if eq_rows else 0
+                if roe_val == 0 and ni_rows and eq > 0: roe_val = round((float(inc.loc[ni_rows.pop(0)].dropna().iloc[-1]) / eq) * 100, 2)
+                if pe_val == 0 and eps_rows:
+                    eps = float(inc.loc[eps_rows.pop(0)].dropna().iloc[-1])
+                    if eps > 0: pe_val = round(price / eps, 2)
+                if de_val == 0 and debt_rows and eq > 0: de_val = round((float(bal.loc[debt_rows.pop(0)].dropna().iloc[-1]) / eq) * 100, 2)
+        except Exception:
+            pass
+
+    rec_str, target_p = get_finnhub_consensus(symbol, fh_key)
+    if not rec_str:
+        rec_map = {'strong_buy': '🟢 強力買入', 'buy': '🟢 買入', 'hold': '🟡 持有', 'underperform': '🟠 減持', 'sell': '🔴 賣出'}
+        rec_str = rec_map.get(str(info.get('recommendationKey', '')).lower(), '⚪ 暫無評級')
+    if target_p == 0.0 and info.get('targetMeanPrice'):
+        target_p = float(info.get('targetMeanPrice'))
+    upside_pct = round(((target_p - price) / price) * 100, 1) if target_p > 0 else 0.0
+
+    return {'symbol': symbol, 'info': info, 'price': price, 'mcap': mcap, 'lot_size': lot_size, 'lot_cost': round(price * lot_size, 0), 'roe_val': roe_val, 'pe_val': pe_val, 'de_val': de_val, 'rec_str': rec_str, 'target_p': round(target_p, 2), 'upside_pct': upside_pct, 'hist': hist}
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_raw_market_data(is_hk, extra_tickers, fh_key):
 regime = get_market_regime(is_hk)
