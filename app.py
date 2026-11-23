@@ -219,20 +219,21 @@ def enrich_single_stock(symbol, hist, is_hk, fh_key):
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_raw_market_data(is_hk, extra_tickers, fh_key):
-regime = get_market_regime(is_hk)
-all_symbols = get_expanded_candidates(is_hk, extra_tickers)
-mkt_name = "港股通與恒指成分" if is_hk else "全美高成長黑馬 + 領頭羊 + 核心池"
-with st.spinner(f"⚡ 正在多源同步【{mkt_name}】共 {len(all_symbols)} 檔 K 線、財報與投行評級（約 15 秒）..."):
-raw_data = yf.download(all_symbols, period="1y", group_by="ticker", threads=True, progress=False)
-valid_hists = {}
-for sym in all_symbols:
-try:
-df_sym = raw_data[sym].dropna(subset=['Close']) if len(all_symbols) > 1 else raw_data.dropna(subset=['Close'])
-if len(df_sym) >= 150: valid_hists[sym] = df_sym
-except Exception: pass
-with ThreadPoolExecutor(max_workers=3) as executor:
-bundles = list(executor.map(lambda s: enrich_single_stock(s, valid_hists.get(s), is_hk, fh_key), list(valid_hists.keys())))
-return [b for b in bundles if b is not None], regime
+    regime = get_market_regime(is_hk)
+    all_symbols = get_expanded_candidates(is_hk, extra_tickers)
+    mkt_name = "港股通與恒指成分" if is_hk else "全美高成長黑馬 + 領頭羊 + 核心池"
+    with st.spinner(f"⚡ 正在多源同步【{mkt_name}】共 {len(all_symbols)} 檔 K 線、財報與投行評級（約 15 秒）..."):
+        raw_data = yf.download(all_symbols, period="1y", group_by="ticker", threads=True, progress=False)
+        valid_hists = {}
+        for sym in all_symbols:
+            try:
+                df_sym = raw_data[sym].dropna(subset=['Close']) if len(all_symbols) > 1 else raw_data.dropna(subset=['Close'])
+                if len(df_sym) >= 150: valid_hists[sym] = df_sym
+            except Exception: pass
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            bundles = list(executor.map(lambda s: enrich_single_stock(s, valid_hists.get(s), is_hk, fh_key), list(valid_hists.keys())))
+    return [b for b in bundles if b is not None], regime
+
 def evaluate_vcp_dynamic(bundles, bench_ret, max_risk_amt, pivot_days, contraction_ratio, max_high_dist, is_hk):
 rows = []
 for b in bundles:
