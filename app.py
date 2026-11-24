@@ -15,6 +15,25 @@ import time
 
 st.set_page_config(page_title="美股 & 港股 VCP 多源量化交易終端機", page_icon="🏆", layout="wide")
 st.title("🏆 美股 & 港股 VCP 實戰交易終端機 (三引擎多源互補版)")
+import uuid
+from datetime import timezone
+
+@st.cache_resource
+def get_traffic_tracker():
+    return {"date": "", "daily_views": 0, "active_users": {}}
+
+tracker = get_traffic_tracker()
+now_ts = time.time()
+today_macau = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
+
+if tracker["date"] != today_macau: tracker["date"], tracker["daily_views"], tracker["active_users"] = today_macau, 0, {}
+if "vid" not in st.session_state: st.session_state["vid"] = str(uuid.uuid4()); tracker["daily_views"] += 1
+
+tracker["active_users"][st.session_state["vid"]] = now_ts
+tracker["active_users"] = {k: v for k, v in tracker["active_users"].items() if now_ts - v <= 300}
+
+st.sidebar.info(f"👁️ 今日瀏覽：{tracker['daily_views']} 次 ｜ 🟢 目前在線：{len(tracker['active_users'])} 人")
+
 
 US_CORE_CANDIDATES = [
     'NVDA', 'AAPL', 'MSFT', 'GOOGL', 'META', 'AMZN', 'TSLA', 'AVGO', 'ORCL', 'CRM',
